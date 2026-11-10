@@ -1,18 +1,20 @@
 # OoMyCache
 
-**Eloquent query caching for Laravel — built for Filament-scale data.**
+<img src="https://cdn.jsdelivr.net/gh/OsamaElnagar/oomycache@main/art/cover.jpg" alt="OoMyCache — transparent Eloquent query caching for Laravel: 0 app queries warm, O(1) table-keyed invalidation, any cache store" width="100%">
+
+**Transparent Eloquent query caching for Laravel — any app, any cache store, no stale reads.**
 
 [![Packagist](https://img.shields.io/badge/packagist-osamaelnagar%2Foomycache-blue)](https://packagist.org/packages/osamaelnagar/oomycache)
 [![PHP](https://img.shields.io/badge/php-%5E8.3-777bb4)](https://www.php.net/)
 [![Laravel](https://img.shields.io/badge/laravel-12%20%7C%2013-ff2d20)](https://laravel.com/)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE.md)
 
-> **Status:** Phase 1 (core engine) complete; Phase 2 tenancy + payload hardening complete; the Filament
-> bridge is extracted into the `osamaelnagar/oomycache-filament` companion package with its own CI lane.
-> Chunked payloads, cache entities and launch automation are next (see `docs/plan/06-roadmap.md`).
+> **Status:** public alpha (`v0.1.0-alpha.*`). Core engine, tenancy, payload hardening and the
+> optional Filament bridge are implemented and tested; see [`docs/implementation`](docs/implementation).
 
 OoMyCache makes repeated Eloquent reads disappear — transparently — with a correctness-first
-invalidation model designed for multi-tenant admin panels:
+invalidation model that works in any Laravel application: APIs, queues, dashboards, back offices,
+and Filament panels (via the optional bridge).
 
 ```php
 use Oomycache\Oomycache\Concerns\HasQueryCache;
@@ -23,15 +25,17 @@ final class Product extends Model
 }
 ```
 
-That's it. Filament resources, tables, widgets, relation managers, route bindings and every plain
-Eloquent query on `Product` now go through the caching builder. No resource changes.
+That's it. Every plain Eloquent query on `Product` now goes through the caching builder. No resource
+changes, no base-class changes, no fork. Filament resources, tables, widgets and relation managers get
+the same benefit when you install the optional bridge — the core package itself has **zero Filament
+dependency**.
 
 ## Why another model cache?
 
 | Feature | OoMyCache |
 | --- | --- |
 | Transparent Eloquent caching | ✅ `newEloquentBuilder()` + `newBaseQueryBuilder()` subclasses; no framework forks |
-| Filament paginator COUNT | ✅ cached via the base query builder (default Filament pagination calls `toBase()->getCountForPagination()`) |
+| Filament paginator COUNT | ✅ cached via the base query builder — any Laravel paginator benefits; the Filament bridge is optional |
 | Invalidation | ✅ version-token namespaces keyed by **connection + table**; O(1) on Redis/Memcached/database/file/array |
 | Relationships | ✅ eager loads, `withCount`/`withSum`/`withExists`, `whereHas`, join/subquery tables recorded as dependencies |
 | Multi-tenant / multi-panel safe | ✅ tenant + panel segments, fail-closed |

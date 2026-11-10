@@ -1,12 +1,15 @@
 {
     "$schema": "https://getcomposer.org/schema.json",
     "name": "osamaelnagar/oomycache",
-    "description": "Eloquent query caching for Laravel — built for Filament-scale data.",
+    "description": "Transparent, correctness-first Eloquent query caching for Laravel: version-token invalidation, any cache store, optional Filament bridge.",
     "keywords": [
         "laravel",
         "cache",
         "eloquent",
         "query-cache",
+        "performance",
+        "database",
+        "redis",
         "filament",
         "osamaelnagar",
         "oomycache"
