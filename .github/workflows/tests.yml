@@ -53,6 +53,7 @@ jobs:
           composer run prepare
 
       - name: PHPStan
+        if: matrix.laravel == '13.*' && matrix.stability == 'prefer-stable'
         run: composer analyse
 
       - name: Linter

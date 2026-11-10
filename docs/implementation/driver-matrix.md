@@ -5,7 +5,7 @@
 
 This document defines the driver matrix: what each store/database driver has actually been proven against, what the nightly CI lanes prove, and how to reproduce each lane locally with EnvKit (or Docker).
 
-**Honest headline:** the default suite still runs on sqlite; the MySQL/PostgreSQL driver lanes additionally run `DatabaseDriverTest` (Eloquent + database cache store) when `OOMYCACHE_TEST_DB` is set, and the Redis/Memcached lanes are connectivity smoke lanes. The package suite runs on Testbench's **sqlite `:memory:`** connection, so the Redis/Memcached/MySQL/PostgreSQL jobs prove the client extension + credentials + full suite stay green — they do not yet assert package cache behaviour on those engines (see §6).
+**Honest headline:** the default suite still runs on sqlite; the MySQL/PostgreSQL driver lanes are connectivity + full-suite smoke lanes; the real engine test (`DatabaseDriverTest`) is run locally with `OOMYCACHE_TEST_DB` because Testbench parallel workers are not isolated per database driver in CI (documented gap). The package suite runs on Testbench's **sqlite `:memory:`** connection, so the Redis/Memcached/MySQL/PostgreSQL jobs prove the client extension + credentials + full suite stay green — they do not yet assert package cache behaviour on those engines (see §6).
 
 ---
 
@@ -18,8 +18,8 @@ This document defines the driver matrix: what each store/database driver has act
 | `database` cache store (SQLite) | ✅ same test `:108` — Laravel `cache` table on Testbench's `testing` connection | ✅ every push/PR matrix | sqlite jobs (baseline) |
 | Real **Redis** store | 🟡 app-level only: dogfood `tests/Feature/QueryCacheRedisStoreTest.php` against EnvKit Redis 8.8.0 with phpredis 6.3 (not in the package repo) | ❌ | ✅ redis lane: probe + full suite |
 | **Memcached** store | 🟡 app-level only: dogfood `tests/Feature/QueryCacheMemcachedStoreTest.php` against EnvKit Memcached 1.6.8 with `ext-memcached` (not in the package repo) | ❌ | 🟡 memcached lane: probe only, `continue-on-error` |
-| **MySQL/MariaDB** | ✅ package `tests/Feature/DatabaseDriverTest.php` runs Eloquent + database cache store on EnvKit MariaDB 13.0.2 (set `OOMYCACHE_TEST_DB=mysql`) | ✅ default suite skips; driver env runs it | ✅ mysql lane: probe + full suite with `OOMYCACHE_TEST_DB=mysql` |
-| **PostgreSQL** | ✅ package `tests/Feature/DatabaseDriverTest.php` runs Eloquent + database cache store on EnvKit PostgreSQL 18.4 (set `OOMYCACHE_TEST_DB=pgsql`) | ✅ default suite skips; driver env runs it | ✅ postgres lane: probe + full suite with `OOMYCACHE_TEST_DB=pgsql` |
+| **MySQL/MariaDB** | ✅ package `tests/Feature/DatabaseDriverTest.php` runs Eloquent + database cache store on EnvKit MariaDB 13.0.2 (set `OOMYCACHE_TEST_DB=mysql`) | ✅ default suite skips; local env runs it | ✅ mysql lane: connectivity probe + full suite (SQLite), no engine assertion |
+| **PostgreSQL** | ✅ package `tests/Feature/DatabaseDriverTest.php` runs Eloquent + database cache store on EnvKit PostgreSQL 18.4 (set `OOMYCACHE_TEST_DB=pgsql`) | ✅ default suite skips; local env runs it | ✅ postgres lane: connectivity probe + full suite (SQLite), no engine assertion |
 | SQLite dogfood (Eloquent, Filament) | ✅ dogfood app suite **159 tests / 575 assertions** (same report §1) — not in the package repo | ❌ | ❌ |
 | Octane | ❌ not covered anywhere yet | ❌ | ❌ (see §6) |
 
@@ -38,8 +38,8 @@ Package suite baseline: **47 tests / 114 assertions**, PHPStan level 7 + Pint + 
 | `sqlite` (×2) | 8.3 + Laravel 12 `prefer-lowest`; 8.5 + Laravel 13 `prefer-stable` | none; `sqlite`, `pdo_sqlite` | Driver-lane baseline: the suite is green on both edges of the supported matrix | External drivers |
 | `redis` | 8.4 / 13 | `redis:7` service; `ext-redis` (phpredis) | phpredis talks to a real Redis; suite green with a Redis cache config present | Package Redis-store behaviour (no package test yet) |
 | `memcached` | 8.4 / 13 | `memcached:1.6-alpine`; `ext-memcached` via PECL | Client can set/get/del against a real Memcached; suite green | Package-level Memcached store behaviour (app-level test exists; lane non-blocking until PECL build history is stable) |
-| `mysql` | 8.4 / 13 | `mysql:8.0`; `pdo_mysql` | PDO credentials/driver work against MySQL 8; suite green; `DatabaseDriverTest` runs Eloquent + database cache store when `OOMYCACHE_TEST_DB=mysql` | sqlite remains the default suite engine |
-| `postgres` | 8.4 / 13 | `postgres:16`; `pdo_pgsql` | PDO credentials/driver work against PostgreSQL 16; suite green; `DatabaseDriverTest` runs Eloquent + database cache store when `OOMYCACHE_TEST_DB=pgsql` | sqlite remains the default suite engine |
+| `mysql` | 8.4 / 13 | `mysql:8.0`; `pdo_mysql` | PDO credentials/driver work against MySQL 8; suite green | Eloquent/database cache store on MySQL (local `OOMYCACHE_TEST_DB=mysql` only) |
+| `postgres` | 8.4 / 13 | `postgres:16`; `pdo_pgsql` | PDO credentials/driver work against PostgreSQL 16; suite green | Eloquent/database cache store on PostgreSQL (local `OOMYCACHE_TEST_DB=pgsql` only) |
 
 All jobs: pinned `actions/checkout` v7.0.1 + `shivammathur/setup-php` v2 SHAs (same pins as `tests.yml`), `composer require` for the Laravel/Testbench pair, `composer update --prefer-* --no-scripts`, `composer run prepare`, a **driver connectivity probe**, then `composer test:unit` (= `vendor/bin/pest --parallel`). No secrets: all service credentials are throwaway CI values. The probes read the job env, so the lane also validates the exact env names consumers will use.
 
