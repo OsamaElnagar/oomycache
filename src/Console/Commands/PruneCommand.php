@@ -92,15 +92,13 @@ class PruneCommand extends Command
             return $pruner->defaultChunkSize();
         }
 
-        if (is_int($option)) {
-            $option = (string) $option;
-        }
-
-        if (! is_string($option) || preg_match('/^\d+$/', $option) !== 1) {
+        if (! is_numeric($option)) {
             $this->components->error('The --chunk option must be a positive integer.');
 
             return null;
         }
+
+        $chunk = (int) $option;
 
         $chunk = (int) $option;
 
