@@ -44,7 +44,7 @@ Eloquent query on `Product` now go through the caching builder. No resource chan
 ## Installation
 
 ```bash
-composer require osamaelnagar/oomycache
+composer require osamaelnagar/oomycache:^0.1.0-alpha.1
 php artisan vendor:publish --tag=oomycache-config
 ```
 
@@ -110,7 +110,7 @@ The Phase-2 bridge is a standalone companion package, [`osamaelnagar/oomycache-f
   (attach/detach/associate/dissociate/reorder/import and the bulk mass branches).
 
 ```bash
-composer require osamaelnagar/oomycache osamaelnagar/oomycache-filament
+composer require osamaelnagar/oomycache:^0.1.0-alpha.1 osamaelnagar/oomycache-filament:^0.1.0-alpha.1
 ```
 
 ```php

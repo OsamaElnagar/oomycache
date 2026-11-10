@@ -69,7 +69,7 @@ COUNT is cached too. Plain Livewire front-office pages show the same behaviour (
 ### Install (core)
 
 ```bash
-composer require osamaelnagar/oomycache
+composer require osamaelnagar/oomycache:^0.1.0-alpha.1
 php artisan vendor:publish --tag=oomycache-config
 
 # add the trait to the models you want cached; caching stays opt-in
@@ -82,7 +82,7 @@ needs the hourly `oomycache:prune` housekeeping.
 ### Install (optional Filament bridge)
 
 ```bash
-composer require osamaelnagar/oomycache-filament
+composer require osamaelnagar/oomycache-filament:^0.1.0-alpha.1
 ```
 
 ```php
