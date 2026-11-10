@@ -23,7 +23,7 @@
 | `cache.pagination` | `true` | engine options | `paginate`/`simplePaginate` item queries |
 | `cache.single_records` | `true` | engine options | `find`/route-binding-shaped single reads |
 | `cache.value_and_pluck` | `true` | engine options | `value`/`pluck` |
-| `cache.negative` | `false` | engine options | cache empty/null results; off by default |
+| `cache.negative` | `false` | engine options | cache empty/null results; off by default. When false, empty results are re-queried every time and counted as `empty_bypasses` in stats |
 | `cache.negative_ttl` | `10` | engine | TTL for negative entries |
 | `cache.search_terms` | `false` | engine | cache user-search-shaped queries (unsafe-ish; keep off) |
 | `cache.skip_query_patterns` | `[]` | engine | raw SQL substrings never cached |
@@ -58,7 +58,7 @@
 | `tenant.resolver` | `null` | class implementing `Contracts\TenantResolver`; validated by doctor |
 | `tenant.include_user` | `false` | bridge resolver adds a hashed user segment |
 | `events.enabled` / `events.hits` / `events.misses` / `events.invalidations` | `true` | event emission switches |
-| `stats.enabled` | `false` | cache-backed hit/miss/bypass/invalidation/clear counters |
+| `stats.enabled` | `false` | cache-backed hit/miss/bypass/invalidation/clear counters; `empty_bypasses` tracks empty results skipped because negative caching is off |
 | `stats.store` | `null` | store for counters (defaults to the main cache store) |
 | `stats.ttl` | `3600` | counter window |
 | `stats.sample_rate` | `1.0` | `(0, 1]` sampling; validated |
@@ -93,4 +93,6 @@
 `payload.mode != arrays`, `ttl < 1`, `ttl_jitter` outside `0–0.5`, invalid compression algorithm,
 negative compression/chunk caps, `chunk_bytes/max_chunks < 1`, `stats.sample_rate` outside `(0,1]`,
 missing/invalid `tenant.resolver`, and unknown `model_presets` names fail the command with exit code 1.
-Warnings (disabled package) do not fail it.
+Warnings (disabled package) do not fail it. Doctor also warns when a cacheable model's `dependencies`
+entry points at a model without `HasQueryCache`: that dependency cannot invalidate the cached model
+automatically, so add the trait or flush explicitly.

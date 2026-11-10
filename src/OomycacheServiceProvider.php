@@ -115,8 +115,12 @@ class OomycacheServiceProvider extends ServiceProvider
         $events->listen(QueryCacheMissed::class, static function () use ($stats): void {
             $stats->record('misses');
         });
-        $events->listen(QueryCacheBypassed::class, static function () use ($stats): void {
+        $events->listen(QueryCacheBypassed::class, static function (QueryCacheBypassed $event) use ($stats): void {
             $stats->record('bypasses');
+
+            if ($event->reason === 'negative-disabled') {
+                $stats->record('empty_bypasses');
+            }
         });
         $events->listen(QueryCacheInvalidated::class, static function () use ($stats): void {
             $stats->record('invalidations');

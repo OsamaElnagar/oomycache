@@ -142,7 +142,9 @@ php artisan oomycache:bench "App\Models\Product" --limit=50 --samples=3 --json  
 php artisan test --compact            # app suite
 ```
 
-Expect `warm` to report **0 app queries** and invalidation to be version-token based.
+Expect `warm` to report **0 app queries** and invalidation to be version-token based. On the database
+store the JSON also reports `store_queries` separately: 0 app queries is not 0 SQL statements.
+Empty results are not cached unless `cache.negative=true`; they show up as `empty_bypasses` in stats.
 
 ## Anti-patterns
 

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Oomycache\Oomycache\Console\Commands;
 
 use Illuminate\Console\Command;
+use Illuminate\Database\Eloquent\Model;
 use Oomycache\Oomycache\Cache\QueryCacheEngine;
 use Oomycache\Oomycache\Contracts\TenantResolver;
 
@@ -18,7 +19,7 @@ class DoctorCommand extends Command
     {
         $status = $engine->status();
         $issues = $this->configIssues();
-        $warnings = [];
+        $warnings = $this->dependencyWarnings($engine);
 
         $this->components->info('OoMyCache doctor');
 
@@ -55,6 +56,47 @@ class DoctorCommand extends Command
         }
 
         return self::SUCCESS;
+    }
+
+    /**
+     * Warn when a model declares a dependency that cannot invalidate it.
+     *
+     * A dependency model only bumps its table version token when that model is
+     * itself cacheable; otherwise the declaration is a silent no-op and the
+     * cached model can go stale until TTL/manual flush.
+     *
+     * @return list<string>
+     */
+    private function dependencyWarnings(QueryCacheEngine $engine): array
+    {
+        $warnings = [];
+
+        $models = array_unique(array_merge(
+            $engine->cacheableModels(),
+            array_keys((array) config('oomycache.model_presets', [])),
+        ));
+
+        foreach ($models as $modelClass) {
+            if (! is_string($modelClass) || ! class_exists($modelClass) || ! is_subclass_of($modelClass, Model::class)) {
+                continue;
+            }
+
+            $dependencies = $engine->optionsFor($modelClass)['dependencies'] ?? [];
+
+            foreach ((array) $dependencies as $dependency) {
+                if (! is_string($dependency) || ! class_exists($dependency) || ! is_subclass_of($dependency, Model::class)) {
+                    continue;
+                }
+
+                if ($engine->isCacheableModel($dependency)) {
+                    continue;
+                }
+
+                $warnings[] = "Cacheable model [{$modelClass}] declares dependency [{$dependency}], but [{$dependency}] is not cacheable; its writes will not invalidate [{$modelClass}] automatically. Add HasQueryCache to it or flush explicitly.";
+            }
+        }
+
+        return array_values(array_unique($warnings));
     }
 
     /**

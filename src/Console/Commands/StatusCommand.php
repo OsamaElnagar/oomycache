@@ -44,6 +44,7 @@ class StatusCommand extends Command
                 ['hits', (string) ($stats['hits'] ?? 0)],
                 ['misses', (string) ($stats['misses'] ?? 0)],
                 ['bypasses', (string) ($stats['bypasses'] ?? 0)],
+                ['empty-result bypasses', (string) ($stats['empty_bypasses'] ?? 0)],
                 ['invalidations', (string) ($stats['invalidations'] ?? 0)],
                 ['clears', (string) ($stats['clears'] ?? 0)],
             ]);

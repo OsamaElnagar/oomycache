@@ -17,7 +17,7 @@ use Throwable;
  */
 final class CacheStats
 {
-    private const array METRICS = ['hits', 'misses', 'bypasses', 'invalidations', 'clears'];
+    private const array METRICS = ['hits', 'misses', 'bypasses', 'empty_bypasses', 'invalidations', 'clears'];
 
     public function __construct(
         private readonly CacheManager $cache,
@@ -52,7 +52,7 @@ final class CacheStats
     }
 
     /**
-     * @return array{enabled: bool, window_seconds: int, hits: int, misses: int, bypasses: int, invalidations: int, clears: int}
+     * @return array{enabled: bool, window_seconds: int, hits: int, misses: int, bypasses: int, empty_bypasses: int, invalidations: int, clears: int}
      */
     public function snapshot(): array
     {
@@ -62,6 +62,7 @@ final class CacheStats
             'hits' => 0,
             'misses' => 0,
             'bypasses' => 0,
+            'empty_bypasses' => 0,
             'invalidations' => 0,
             'clears' => 0,
         ];

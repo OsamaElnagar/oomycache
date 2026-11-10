@@ -45,6 +45,16 @@ it('records a clear counter', function (): void {
     expect($stats['clears'])->toBeGreaterThanOrEqual(1);
 });
 
+it('records empty-result bypasses when negative caching is disabled', function (): void {
+    config(['oomycache.cache.negative' => false]);
+
+    Product::query()->where('sku', 'NOPE-EMPTY')->get();
+
+    $stats = app(QueryCacheEngine::class)->status()['stats'];
+
+    expect($stats['empty_bypasses'])->toBeGreaterThanOrEqual(1);
+});
+
 it('runs the bench command for a cacheable model', function (): void {
     Category::query()->create(['name' => 'Bench category', 'is_active' => true]);
     Product::query()->create(['sku' => 'BENCH-1', 'name' => 'Bench product', 'is_active' => true]);

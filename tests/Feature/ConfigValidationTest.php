@@ -2,9 +2,28 @@
 
 declare(strict_types=1);
 
+use Oomycache\Oomycache\Cache\QueryCacheEngine;
+use Workbench\App\Models\Product;
+use Workbench\App\Models\User;
+
 it('passes with the default configuration', function (): void {
     $this->artisan('oomycache:doctor')
         ->expectsOutputToContain('No configuration issues or warnings.')
+        ->assertSuccessful();
+});
+
+it('warns when a declared dependency model is not cacheable', function (): void {
+    config([
+        'oomycache.presets' => [
+            'uncached-dependency' => ['dependencies' => [User::class]],
+        ],
+        'oomycache.model_presets' => [Product::class => 'uncached-dependency'],
+    ]);
+
+    app(QueryCacheEngine::class)->resetRuntimeState();
+
+    $this->artisan('oomycache:doctor')
+        ->expectsOutputToContain('is not cacheable')
         ->assertSuccessful();
 });
 

@@ -106,7 +106,7 @@ public function queryCacheOptions(): array
 | `oomycache:status` | configuration, store capabilities, cacheable models, version tokens, optional stats counters |
 | `oomycache:clear [--model=…]` | invalidate one/many models (or the whole namespace) |
 | `oomycache:doctor` | diagnose store support, payload mode, common traps |
-| `oomycache:bench {model}` | cold vs warm app-query counts and timings for a cacheable model (`--limit`, `--samples`, `--json`); isolated benchmark keys, memo reset between samples, no global cache clear unless `--clear` |
+| `oomycache:bench {model}` | cold vs warm app-query counts, separate cache-store statement counts, and timings for a cacheable model (`--limit`, `--samples`, `--json`); isolated benchmark keys, memo reset between samples, no global cache clear unless `--clear` |
 | `oomycache:prune` | delete expired database-cache rows (keyset-ordered, expiry-guarded; `--dry-run`, `--chunk`, `--max-seconds`; schedule hourly) |
 
 ## Filament compatibility

@@ -17,7 +17,7 @@ O(1) table-keyed invalidation — and has been dogfooded in a real Filament ERP 
 | Core package | **73 passed + 1 skipped driver lane / 261 assertions**, PHPStan level 7 clean, Pint clean, **100% type coverage** |
 | Filament companion (`osamaelnagar/oomycache-filament`) | **6 tests / 9 assertions**, PHPStan/Pint clean, own GitHub Actions matrix (PHP 8.3–8.5 × Laravel 12/13 × Testbench 10/11) |
 | Dogfood app suite | **162 tests / 580 assertions** (Filament resources/widgets/pages, relation managers, Livewire front office, Redis, tenancy) |
-| Live cache behaviour | Warm ERP-table queries: **0 queries** on Filament pages, relation-manager E2E, and plain Livewire pages |
+| Live cache behaviour | Warm reads: **0 application queries** on Filament pages, relation-manager E2E, and plain Livewire pages (database store still executes cache-table statements; see `store_queries` in bench JSON) |
 | Real Redis | phpredis installed through EnvKit; cache-store test passes against Redis 8.8 |
 | Tenancy | real tenant-enabled panel: A/B isolation, back-to-A hits, fail-closed `tenant-unresolved` |
 | Payload hardening | compression envelope, per-request memo, negative caching with short TTL |

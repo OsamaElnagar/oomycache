@@ -64,6 +64,8 @@ class BenchCommand extends Command
         }
 
         $warmQueries = array_sum(array_column($warm, 'app_queries')) / count($warm);
+        $warmStoreQueries = array_sum(array_column($warm, 'store_queries')) / count($warm);
+        $warmTotalQueries = array_sum(array_column($warm, 'queries')) / count($warm);
         $warmMs = array_sum(array_column($warm, 'ms')) / count($warm);
 
         $result = [
@@ -75,6 +77,8 @@ class BenchCommand extends Command
             'warm_samples' => count($warm),
             'warm_avg_ms' => round($warmMs, 3),
             'warm_avg_app_queries' => round($warmQueries, 2),
+            'warm_avg_store_queries' => round($warmStoreQueries, 2),
+            'warm_avg_total_queries' => round($warmTotalQueries, 2),
             'warm' => $warm,
         ];
 
@@ -91,18 +95,22 @@ class BenchCommand extends Command
         }
 
         $this->table(
-            ['Run', 'App queries', 'Total queries', 'Time (ms)'],
+            ['Run', 'App queries', 'Store queries', 'Total', 'Time (ms)'],
             [
-                ['cold', $cold['app_queries'], $cold['queries'], $cold['ms']],
-                ['warm avg ('.$samples.' samples)', round($warmQueries, 2), '—', round($warmMs, 3)],
+                ['cold', $cold['app_queries'], $cold['store_queries'], $cold['queries'], $cold['ms']],
+                ['warm avg ('.$samples.' samples)', round($warmQueries, 2), round($warmStoreQueries, 2), round($warmTotalQueries, 2), round($warmMs, 3)],
             ],
         );
+
+        if ($warmStoreQueries > 0) {
+            $this->components->warn('Warm reads hit the cache-store table too; "0 app queries" is not "0 SQL statements" on the database store.');
+        }
 
         return self::SUCCESS;
     }
 
     /**
-     * @return array{queries: int, app_queries: int, ms: float}
+     * @return array{queries: int, app_queries: int, store_queries: int, ms: float}
      */
     private function measure(string $model, int $limit, string $suffix): array
     {
@@ -128,11 +136,17 @@ class BenchCommand extends Command
         DB::flushQueryLog();
 
         $appQueries = 0;
+        $storeQueries = 0;
+        $cacheTable = strtolower((string) config('cache.stores.database.table', 'cache'));
+        $cacheLockTable = strtolower((string) config('cache.stores.database.lock_table', 'cache_locks'));
 
         foreach ($log as $entry) {
             $sql = strtolower((string) $entry['query']);
 
-            if (str_contains($sql, '"cache"') || str_contains($sql, '"cache_locks"')) {
+            if (str_contains($sql, '"'.$cacheTable.'"') || str_contains($sql, '`'.$cacheTable.'`')
+                || str_contains($sql, '"'.$cacheLockTable.'"') || str_contains($sql, '`'.$cacheLockTable.'`')) {
+                $storeQueries++;
+
                 continue;
             }
 
@@ -142,6 +156,7 @@ class BenchCommand extends Command
         return [
             'queries' => count($log),
             'app_queries' => $appQueries,
+            'store_queries' => $storeQueries,
             'ms' => round($ms, 3),
         ];
     }
