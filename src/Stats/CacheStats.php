@@ -96,6 +96,9 @@ final class CacheStats
 
     private function repository(): Repository
     {
-        return $this->cache->store($this->config->get('oomycache.stats.store'));
+        $store = $this->config->get('oomycache.stats.store')
+            ?? $this->config->get('oomycache.store');
+
+        return $this->cache->store($store);
     }
 }

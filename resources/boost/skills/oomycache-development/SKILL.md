@@ -122,7 +122,8 @@ writes invalidate the entry automatically; otherwise flush explicitly.
 - Database cache store: every warm read is also a cache-table SELECT. Measure `app_queries` and
   `store_queries` separately before enabling traits.
 - Single host without Redis: keep the app on database but use a dedicated file store for OoMyCache:
-  `OOMYCACHE_STORE=file` (per-server, not shared across nodes).
+  `OOMYCACHE_STORE=file` (per-server, not shared across nodes). When stats are enabled, set
+  `OOMYCACHE_STATS_STORE=file` too; otherwise stats counters keep using the app's database store.
 - Redis/Memcached for multi-node; array for tests only.
 
 ## How invalidation works (do not fight it)

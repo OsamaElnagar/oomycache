@@ -60,7 +60,7 @@
 | `tenant.include_user` | `false` | bridge resolver adds a hashed user segment |
 | `events.enabled` / `events.hits` / `events.misses` / `events.invalidations` | `true` | event emission switches |
 | `stats.enabled` | `false` | cache-backed hit/miss/bypass/invalidation/clear counters; `empty_bypasses` tracks empty results skipped because negative caching is off |
-| `stats.store` | `null` | store for counters (defaults to the main cache store) |
+| `stats.store` | `null` | store for counters (defaults to `oomycache.store`, then Laravel's default cache store) |
 | `stats.ttl` | `3600` | counter window |
 | `stats.sample_rate` | `1.0` | `(0, 1]` sampling; validated |
 | `commands.register` | `true` | auto-register `status/clear/doctor/bench/prune` |

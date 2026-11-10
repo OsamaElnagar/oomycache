@@ -11,6 +11,16 @@ This is useful on a single host where Redis/Memcached is unavailable but the fil
 (for example a Hostinger shared/premium plan). It avoids the cache-table SELECTs that the database
 store adds to every warm read.
 
+If stats are enabled, keep them on the same store too (the default follows `OOMYCACHE_STORE`):
+
+```dotenv
+OOMYCACHE_STATS=true
+OOMYCACHE_STATS_STORE=file
+```
+
+Otherwise the stats counters silently keep using Laravel's default store and re-introduce cache-table
+SQL on every hit/miss.
+
 ## Measure, don't assume
 
 Run the benchmark on the deployment host, on a real cacheable model, with the corrected output:

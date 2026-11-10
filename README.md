@@ -76,12 +76,13 @@ CACHE_STORE=database
 OOMYCACHE_STORE=file
 ```
 
-This removes the cache-table SELECTs that a database-backed query cache adds to every warm read. File
-cache is per-server and not shared across load-balanced nodes; benchmark it on the deployment host
-before enabling model traits, using the `app_queries`/`store_queries` split from `oomycache:bench`.
-Redis/Memcached remain the right choice for multi-node deployments; `array` is for tests only. See
-[`docs/implementation/store-selection.md`](docs/implementation/store-selection.md) for the full
-trade-off table, including Hostinger-style shared hosting.
+This removes the cache-table SELECTs that a database-backed query cache adds to every warm read. If
+stats are enabled, set `OOMYCACHE_STATS_STORE=file` too (it defaults to `OOMYCACHE_STORE` in the
+current release). File cache is per-server and not shared across load-balanced nodes; benchmark it on
+the deployment host before enabling model traits, using the `app_queries`/`store_queries` split from
+`oomycache:bench`. Redis/Memcached remain the right choice for multi-node deployments; `array` is for
+tests only. See [`docs/implementation/store-selection.md`](docs/implementation/store-selection.md) for
+the full trade-off table, including Hostinger-style shared hosting.
 
 ## Usage
 

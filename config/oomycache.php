@@ -195,7 +195,7 @@ return [
 
     'stats' => [
         'enabled' => (bool) env('OOMYCACHE_STATS', false),
-        'store' => null,
+        'store' => env('OOMYCACHE_STATS_STORE'),
         'ttl' => 3600,
         'sample_rate' => 1.0,
     ],
