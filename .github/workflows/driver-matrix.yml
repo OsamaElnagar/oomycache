@@ -230,7 +230,6 @@ jobs:
       DB_DATABASE: oomycache
       DB_USERNAME: oomycache
       DB_PASSWORD: oomycache
-      OOMYCACHE_TEST_DB: mysql
 
     steps:
       - name: Checkout code
@@ -290,7 +289,6 @@ jobs:
       DB_DATABASE: oomycache
       DB_USERNAME: oomycache
       DB_PASSWORD: oomycache
-      OOMYCACHE_TEST_DB: pgsql
 
     steps:
       - name: Checkout code
