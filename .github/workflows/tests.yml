@@ -60,7 +60,7 @@ jobs:
         run: composer lint:check
 
       - name: Type Coverage
-        if: runner.os != 'Windows'
+        if: runner.os != 'Windows' && matrix.laravel == '13.*' && matrix.stability == 'prefer-stable'
         run: composer test:types
 
       - name: Test Suite
