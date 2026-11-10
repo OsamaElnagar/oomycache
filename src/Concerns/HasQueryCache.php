@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 namespace Oomycache\Oomycache\Concerns;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Oomycache\Oomycache\Builder\QueryCacheBuilder;
 use Oomycache\Oomycache\Builder\QueryCacheQueryBuilder;
 use Oomycache\Oomycache\Cache\QueryCacheEngine;
+use Oomycache\Oomycache\Relations\CachingBelongsToMany;
 
 /**
  * Opt-in trait: make a model's Eloquent reads cacheable.
@@ -46,6 +48,32 @@ trait HasQueryCache
     public function newEloquentBuilder($query): QueryCacheBuilder
     {
         return new QueryCacheBuilder($query, app(QueryCacheEngine::class));
+    }
+
+    /**
+     * Wrap many-to-many relations so pivot writes invalidate both table
+     * namespaces. Pivot writes do not dispatch Eloquent model events.
+     */
+    protected function newBelongsToMany(
+        Builder $query,
+        Model $parent,
+        $table,
+        $foreignPivotKey,
+        $relatedPivotKey,
+        $parentKey,
+        $relatedKey,
+        $relationName = null,
+    ): CachingBelongsToMany {
+        return new CachingBelongsToMany(
+            $query,
+            $parent,
+            $table,
+            $foreignPivotKey,
+            $relatedPivotKey,
+            $parentKey,
+            $relatedKey,
+            $relationName,
+        );
     }
 
     public static function flushQueryCache(): void

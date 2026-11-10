@@ -28,6 +28,7 @@
 | `cache.search_terms` | `false` | engine | cache user-search-shaped queries (unsafe-ish; keep off) |
 | `cache.skip_query_patterns` | `[]` | engine | raw SQL substrings never cached |
 | `cache.skip_models` | `[]` | engine | model classes never cached even with the trait |
+| `cache.pivot_invalidation` | `true` | engine (belongsToMany relation) | flush both sides after attach/detach/sync/toggle/pivot updates |
 
 ## 2. Safety & payload
 

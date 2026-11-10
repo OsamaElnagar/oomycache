@@ -13,7 +13,8 @@ fire those events** and therefore keep cached reads until TTL expiry (or forever
 | --- | --- | --- |
 | Quiet model writes | `$model->saveQuietly()`, `Model::withoutEvents(...)` | call `Oomycache::flush([$model::class])` after the write |
 | Raw query-builder writes | `DB::table('products')->update(...)`, `DB::statement(...)` | flush the affected model class(es) |
-| Non-Filament pivot writes | `$product->suppliers()->attach($id)` | flush both sides (`Product`, `Supplier`) or the pivot-dependent models |
+| Non-Filament `belongsToMany` pivot writes on cacheable models | `$product->suppliers()->attach($id)` | covered automatically by `CachingBelongsToMany`: both table namespaces flush after attach/detach/sync/toggle |
+| `morphToMany` / raw pivot-table writes | `$product->tags()->attach($id)` on a morph relation; `DB::table('pivot')->insert()` | flush both sides explicitly (`Oomycache::flush([...])`) |
 | Filament pivot/action writes | attach/detach/reorder/import | covered by the bridge `ActionCalled` listener; custom action names must be added to the invalidator or flushed manually |
 
 `Oomycache::flush([...])` bumps the version token — O(1), no key scans. Background jobs that write via

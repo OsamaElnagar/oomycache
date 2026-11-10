@@ -66,6 +66,23 @@ php artisan vendor:publish --tag=oomycache-config
 Add the trait to the models you want cached. That is opt-in by design: un-audited models stay
 uncached. Recommended defaults are production-safe out of the box; see `config/oomycache.php`.
 
+### No Redis? Dedicated file store
+
+The package can use a different store from the rest of the application. On a single host with a writable
+`storage/` directory, keep Laravel's app cache on `database` but put OoMyCache on `file`:
+
+```dotenv
+CACHE_STORE=database
+OOMYCACHE_STORE=file
+```
+
+This removes the cache-table SELECTs that a database-backed query cache adds to every warm read. File
+cache is per-server and not shared across load-balanced nodes; benchmark it on the deployment host
+before enabling model traits, using the `app_queries`/`store_queries` split from `oomycache:bench`.
+Redis/Memcached remain the right choice for multi-node deployments; `array` is for tests only. See
+[`docs/implementation/store-selection.md`](docs/implementation/store-selection.md) for the full
+trade-off table, including Hostinger-style shared hosting.
+
 ## Usage
 
 ```php
@@ -84,6 +101,42 @@ Product::flushQueryCache();
 Oomycache::flush([Product::class, Category::class]);
 Oomycache::clear();
 ```
+
+Many-to-many pivots are covered automatically for cacheable models: the package wraps
+`belongsToMany` and flushes both table namespaces after `attach`, `detach`, `sync`, `toggle` and
+pivot updates (disable with `OOMYCACHE_PIVOT_INVALIDATION=false`). `morphToMany` and raw pivot-table
+writes still need an explicit flush.
+
+### Caching raw report/dashboard queries
+
+`DB::table()` reports cannot use the Eloquent builder. Use `rememberQuery()` with an explicit key and
+table dependency list:
+
+```php
+use Oomycache\Oomycache\Facades\Oomycache;
+use Illuminate\Support\Facades\DB;
+
+$rows = Oomycache::rememberQuery(
+    tables: ['journal_lines', 'journal_entries'],
+    key: 'owner-dashboard:'.$year,
+    ttl: 120,
+    callback: fn (): array => DB::table('journal_lines')
+        ->where('fiscal_year_id', $year)
+        ->orderBy('date')
+        ->get()
+        ->map(fn (object $row): array => (array) $row)
+        ->all(),
+);
+
+// the caller owns the key: include every filter that changes the result
+// invalidate explicitly when those tables are written outside cacheable models
+Oomycache::flushTables(['journal_lines', 'journal_entries']);
+```
+
+The key includes tenant segments and the version tokens of all listed tables. If the listed tables are
+written through cacheable Eloquent models, those writes invalidate the entry automatically; otherwise
+call `flushTables()` after the write path. Prefer returning arrays/scalars; raw result objects are
+normalized to arrays.
 
 Per-model overrides:
 
@@ -151,7 +204,10 @@ See [`docs/implementation/phase-2-progress.md`](docs/implementation/phase-2-prog
 
 - **Opt-in per model.** No trait, no caching.
 - **Versioned invalidation.** A write bumps the table's version token; all cache keys embedding it
-  become unreachable. No tags required on any driver.
+  become unreachable. No tags required on any driver. Cacheable models' `belongsToMany` pivot
+  operations flush both sides automatically.
+- **Explicit raw-query invalidation.** `rememberQuery()` entries are versioned by the tables you list;
+  `flushTables()` covers write paths that do not go through cacheable models.
 - **Fail-open reads, loud invalidation.** Cache outages fall back to the DB; failed invalidations are
   logged/thrown instead of silently serving stale data.
 - **Transaction-aware.** Reads inside a transaction bypass the cache; writes invalidate after commit.

@@ -23,7 +23,9 @@ version-token invalidation and an optional Filament 5 bridge.
 - `src/Cache/CacheVersionStore.php` — per-connection+table version namespaces.
 - `src/Invalidation/InvalidationManager.php` — Eloquent events → version bumps (afterCommit aware).
 - `src/Payload/*` — arrays-JSON codec, compression, chunking.
+- `src/Relations/CachingBelongsToMany.php` — pivot attach/detach/sync invalidation for cacheable models.
 - `src/Query/*` — fingerprinting, dependency recording, eager-load resolution.
+- `Oomycache::rememberQuery()` / `flushTables()` — raw DB::table() report caching by explicit tables.
 - `src/Tenant/*`, `src/Contracts/TenantResolver.php` — tenant/panel/user key segments, fail-closed.
 - `config/oomycache.php` — the complete config surface; validate with `oomycache:doctor`.
 - `src/Console/Commands/*` — status, clear, doctor, bench, prune.
@@ -49,7 +51,8 @@ agents. Keep it focused on installing/configuring OoMyCache in an app, not packa
 
 - Do not commit `composer.lock`, `vendor/`, `build/` or PHPUnit caches.
 - Do not claim Filament is required; the core works in any Laravel app.
-- Do not soften the correctness model: invalidations are version-token based, raw/quiet/pivot writes
-  need an explicit flush, and `Cache::flush()` is never used.
+- Do not soften the correctness model: invalidations are version-token based; raw/quiet writes and
+  `morphToMany`/raw pivot writes need an explicit flush, and `Cache::flush()` is never used.
+  `belongsToMany` pivot writes on cacheable models are covered by `CachingBelongsToMany`.
 - Before tagging, follow `docs/implementation/release-checklist.md` and run
   `scripts/release-rehearsal.ps1`.

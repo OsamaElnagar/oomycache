@@ -75,6 +75,11 @@ return [
         'search_terms' => false,
         'skip_query_patterns' => [],
         'skip_models' => [],
+
+        // Invalidate both table namespaces when a cacheable model's
+        // belongsToMany pivot is attached/detached/synced. Pivot writes do not
+        // fire Eloquent model events; this closes that invalidation hole.
+        'pivot_invalidation' => true,
     ],
 
     /*

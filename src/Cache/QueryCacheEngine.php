@@ -12,6 +12,7 @@ use Illuminate\Contracts\Config\Repository as ConfigRepository;
 use Illuminate\Contracts\Container\Container;
 use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Database\Eloquent\Model;
+use InvalidArgumentException;
 use Oomycache\Oomycache\Builder\QueryCacheQueryBuilder;
 use Oomycache\Oomycache\Concerns\HasQueryCache;
 use Oomycache\Oomycache\Contracts\PayloadCodec;
@@ -322,6 +323,163 @@ final class QueryCacheEngine
         }
 
         return $value;
+    }
+
+    /**
+     * Cache an explicit raw-query result with an explicit dependency list.
+     *
+     * Intended for report/dashboard reads that use DB::table() rather than
+     * Eloquent. The caller supplies a stable key and the tables whose version
+     * tokens must invalidate the entry. Prefer returning arrays/scalars.
+     *
+     * @template TReturn
+     *
+     * @param  list<string>  $tables
+     * @param  callable(): TReturn  $execute
+     * @return TReturn
+     */
+    public function rememberRaw(array $tables, string $key, int $ttl, callable $execute, ?string $connection = null): mixed
+    {
+        $tables = array_values(array_unique(array_filter(
+            array_map(static fn (string $table): string => trim($table), $tables),
+            static fn (string $table): bool => $table !== '',
+        )));
+
+        if ($tables === [] || trim($key) === '' || $ttl < 1) {
+            throw new InvalidArgumentException('rememberRaw() requires at least one table, a key and a TTL >= 1.');
+        }
+
+        if (! $this->enabled()) {
+            return $execute();
+        }
+
+        $tenant = $this->tenantContext();
+
+        if ($tenant->failClosed) {
+            $this->dispatchRawBypassed('tenant-unresolved');
+
+            return $execute();
+        }
+
+        $connection = $connection ?? $this->config->get('database.default');
+        $connection = is_string($connection) ? $connection : null;
+        $cacheKey = $this->buildRawKey($tables, $key, $connection, $tenant);
+
+        if ($this->memoEnabled() && array_key_exists($cacheKey, $this->requestMemo)) {
+            $this->dispatchRawHit($cacheKey);
+
+            return $this->requestMemo[$cacheKey];
+        }
+
+        $corrupt = false;
+
+        try {
+            $payload = $this->repository()->get($cacheKey);
+
+            if (is_string($payload) && $this->chunks->isManifest($payload)) {
+                $resolved = $this->chunks->read($this->repository(), $cacheKey, $payload);
+
+                $corrupt = $resolved === null;
+                $payload = $resolved;
+            }
+        } catch (Throwable $exception) {
+            $this->reportCacheError($exception);
+
+            return $execute();
+        }
+
+        if (is_string($payload)) {
+            try {
+                $value = $this->codec->decode($this->compressor->decompress($payload));
+
+                if ($this->memoEnabled()) {
+                    $this->requestMemo[$cacheKey] = $value;
+                }
+
+                $this->dispatchRawHit($cacheKey);
+
+                return $value;
+            } catch (Throwable $exception) {
+                $this->forgetQuietly($cacheKey);
+                $this->reportCacheError($exception);
+                $this->dispatchRawMissed($cacheKey, 'corrupt-payload');
+
+                return $execute();
+            }
+        }
+
+        $this->dispatchRawMissed($cacheKey, $corrupt ? 'corrupt-payload' : 'miss');
+        $value = $execute();
+
+        if (! (bool) $this->config->get('oomycache.cache.negative', false) && $this->isEmptyResult($value)) {
+            $this->dispatchRawBypassed('negative-disabled');
+
+            return $value;
+        }
+
+        try {
+            $encoded = $this->codec->encode($value);
+            $max = (int) $this->config->get('oomycache.safety.max_payload_bytes', 1_048_576);
+            $chunking = $this->chunks->enabled();
+
+            if (! $chunking && $max > 0 && strlen($encoded) > $max) {
+                $this->dispatchRawBypassed('payload-too-large');
+
+                return $value;
+            }
+
+            $encoded = $this->compressor->compress($encoded);
+            $entryTtl = $this->isEmptyResult($value)
+                ? max(1, (int) $this->config->get('oomycache.cache.negative_ttl', 10))
+                : $this->resolveRawTtl($ttl);
+
+            if ($chunking && $this->chunks->exceedsTotalBudget(strlen($encoded))) {
+                $this->dispatchRawBypassed('payload-too-large');
+
+                return $value;
+            }
+
+            if ($chunking && $this->chunks->shouldChunk(strlen($encoded))) {
+                if ($this->chunks->chunkCount(strlen($encoded)) > $this->chunks->maxChunks()) {
+                    $this->dispatchRawBypassed('payload-too-large');
+
+                    return $value;
+                }
+
+                if (! $this->chunks->put($this->repository(), $cacheKey, $encoded, $entryTtl)) {
+                    return $value;
+                }
+            } else {
+                $this->repository()->put($cacheKey, $encoded, $entryTtl);
+            }
+
+            if ($this->memoEnabled()) {
+                $this->requestMemo[$cacheKey] = $value;
+            }
+        } catch (Throwable $exception) {
+            $this->reportCacheError($exception);
+        }
+
+        return $value;
+    }
+
+    /**
+     * Invalidate explicit tables, including raw-query cache entries.
+     *
+     * @param  list<string>  $tables
+     */
+    public function flushTables(array $tables, ?string $connection = null, string $reason = 'manual'): void
+    {
+        $connection = $connection ?? $this->config->get('database.default');
+        $connection = is_string($connection) ? $connection : null;
+
+        foreach (array_unique($tables) as $table) {
+            if ($table === '') {
+                continue;
+            }
+
+            $this->flushTable($table, $connection, $reason);
+        }
     }
 
     public function rememberBaseCount(BaseQueryContext $context, QueryCacheQueryBuilder $builder, Closure $execute): mixed
@@ -674,6 +832,38 @@ final class QueryCacheEngine
 
     /**
      * @param  list<string>  $tables
+     */
+    private function buildRawKey(array $tables, string $key, ?string $connection, TenantContext $tenant): string
+    {
+        return $this->composeKey(Fingerprint::hash([
+            'v' => 1,
+            'kind' => 'raw-query',
+            'key' => $key,
+            'connection' => $connection,
+            'tables' => $this->versionVector($tables, $connection),
+            'global' => $this->globalVersion(),
+            'tenant' => $tenant->segments(),
+        ]), $tenant->segments());
+    }
+
+    private function resolveRawTtl(int $ttl): int
+    {
+        $ttl = max(1, $ttl);
+        $jitter = min(0.5, max(0.0, (float) $this->config->get('oomycache.ttl_jitter', 0.0)));
+
+        if ($jitter > 0.0) {
+            $maxReduction = (int) floor($ttl * $jitter);
+
+            if ($maxReduction > 0) {
+                $ttl -= random_int(0, $maxReduction);
+            }
+        }
+
+        return max(1, $ttl);
+    }
+
+    /**
+     * @param  list<string>  $tables
      * @return array<string, string>
      */
     private function versionVector(array $tables, ?string $connection): array
@@ -761,7 +951,32 @@ final class QueryCacheEngine
 
     private function isEmptyResult(mixed $value): bool
     {
-        return $value === null || ($value instanceof Countable && count($value) === 0);
+        return $value === null
+            || $value === []
+            || ($value instanceof Countable && count($value) === 0);
+    }
+
+    private function dispatchRawHit(string $key): void
+    {
+        if ((bool) $this->config->get('oomycache.events.enabled', true)
+            && (bool) $this->config->get('oomycache.events.hits', true)) {
+            $this->dispatcher()->dispatch(new QueryCacheHit('raw-query', 'raw', $key));
+        }
+    }
+
+    private function dispatchRawMissed(string $key, string $reason): void
+    {
+        if ((bool) $this->config->get('oomycache.events.enabled', true)
+            && (bool) $this->config->get('oomycache.events.misses', true)) {
+            $this->dispatcher()->dispatch(new QueryCacheMissed('raw-query', 'raw', $key, $reason));
+        }
+    }
+
+    private function dispatchRawBypassed(string $reason): void
+    {
+        if ((bool) $this->config->get('oomycache.events.enabled', true) && (bool) $this->config->get('oomycache.events.bypasses', true)) {
+            $this->dispatcher()->dispatch(new QueryCacheBypassed('raw-query', 'raw', $reason));
+        }
     }
 
     private function dispatchHit(QueryContext $context, string $key): void

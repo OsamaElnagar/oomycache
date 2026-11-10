@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
 use Oomycache\Oomycache\Contracts\PayloadCodec;
+use stdClass;
 use UnexpectedValueException;
 
 /**
@@ -43,6 +44,10 @@ final class ArrayPayloadCodec implements PayloadCodec
 
     private function normalize(mixed $value): mixed
     {
+        if ($value instanceof stdClass) {
+            return (array) $value;
+        }
+
         if ($value instanceof Model) {
             $relations = [];
 

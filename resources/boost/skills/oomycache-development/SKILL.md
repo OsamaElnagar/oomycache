@@ -85,6 +85,46 @@ public function queryCacheOptions(): array
 }
 ```
 
+## Raw report/dashboard queries
+
+`DB::table()` reads cannot use the Eloquent builder. Cache them explicitly with a stable key and the
+tables that must invalidate the entry:
+
+```php
+use Oomycache\Oomycache\Facades\Oomycache;
+use Illuminate\Support\Facades\DB;
+
+$rows = Oomycache::rememberQuery(
+    tables: ['journal_lines', 'journal_entries'],
+    key: 'owner-dashboard:'.$year,
+    ttl: 120,
+    callback: fn (): array => DB::table('journal_lines')->where('fiscal_year_id', $year)->get()
+        ->map(fn (object $row): array => (array) $row)->all(),
+);
+
+Oomycache::flushTables(['journal_lines', 'journal_entries']); // when writes bypass cacheable models
+```
+
+The key is the caller's responsibility (include every filter); tenant segments and the listed tables'
+version tokens are added by the package. If listed tables are written through cacheable models, their
+writes invalidate the entry automatically; otherwise flush explicitly.
+
+## Pivots and raw writes
+
+- `belongsToMany` on cacheable models is wrapped: `attach`/`detach`/`sync`/`toggle`/pivot updates flush
+  both table namespaces (config `cache.pivot_invalidation`, default true).
+- `morphToMany`, raw pivot-table writes, `saveQuietly()`/`withoutEvents()` and raw
+  `DB::table()->update()/delete()/insert()` still need an explicit `Oomycache::flush([...])` or
+  `flushTables([...])`.
+
+## Store choice (including no-Redis hosts)
+
+- Database cache store: every warm read is also a cache-table SELECT. Measure `app_queries` and
+  `store_queries` separately before enabling traits.
+- Single host without Redis: keep the app on database but use a dedicated file store for OoMyCache:
+  `OOMYCACHE_STORE=file` (per-server, not shared across nodes).
+- Redis/Memcached for multi-node; array for tests only.
+
 ## How invalidation works (do not fight it)
 
 - Keys embed a version token per **connection + table**, plus the global token, payload version and
@@ -92,8 +132,8 @@ public function queryCacheOptions(): array
 - Eloquent model events and OoMyCache's builder write methods bump the token — O(1), no key scans.
 - A related write invalidates recorded relationships (`withCount`, `whereHas`, joins, eager loads).
 - **Writes outside Eloquent do not invalidate automatically:** `saveQuietly()`,
-  `Model::withoutEvents()`, raw `DB::table()->update()/delete()/insert()` and non-Filament pivot
-  attach/detach need an explicit `Oomycache::flush([...])`.
+  `Model::withoutEvents()`, raw `DB::table()->update()/delete()/insert()`, `morphToMany` and raw pivot
+  writes need an explicit `Oomycache::flush([...])` or `flushTables([...])`.
 - Reads inside a transaction bypass the cache; writes inside a transaction invalidate after commit
   (both defaults are configurable under `safety`).
 - Never call `Cache::flush()` to invalidate OoMyCache. Use `oomycache:clear` / `Oomycache::clear()`.
@@ -109,7 +149,8 @@ php artisan oomycache:clear      # global version bump (never Cache::flush)
 ```
 
 Run `oomycache:doctor` after changing configuration. Run `oomycache:bench` before/after adoption to
-prove warm reads execute **0 application queries**.
+prove warm reads execute **0 application queries**; on the database store it also reports the
+cache-store statements separately (`store_queries`).
 
 ## Configuration highlights
 
