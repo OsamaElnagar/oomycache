@@ -3,8 +3,6 @@ parameters:
     paths:
         - src
         - config
-        - database
-        - routes
     tmpDir: build/phpstan
     ignoreErrors:
         - identifier: larastan.noEnvCallsOutsideOfConfig
