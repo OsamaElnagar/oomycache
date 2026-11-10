@@ -1,13 +1,24 @@
-# OoMyCache
+<p align="center">
+  <img src="https://cdn.jsdelivr.net/gh/OsamaElnagar/oomycache@main/art/cover.jpg" alt="OoMyCache — transparent Eloquent query caching for Laravel: 0 app queries warm, O(1) table-keyed invalidation, any cache store" width="100%">
+</p>
 
-<img src="https://cdn.jsdelivr.net/gh/OsamaElnagar/oomycache@main/art/cover.jpg" alt="OoMyCache — transparent Eloquent query caching for Laravel: 0 app queries warm, O(1) table-keyed invalidation, any cache store" width="100%">
+<h1 align="center">OoMyCache</h1>
 
-**Transparent Eloquent query caching for Laravel — any app, any cache store, no stale reads.**
+<p align="center">
+  <strong>Transparent, correctness-first Eloquent query caching for Laravel.</strong><br>
+  Any app · any cache store · version-token invalidation · Filament bridge optional.
+</p>
 
-[![Packagist](https://img.shields.io/badge/packagist-osamaelnagar%2Foomycache-blue)](https://packagist.org/packages/osamaelnagar/oomycache)
-[![PHP](https://img.shields.io/badge/php-%5E8.3-777bb4)](https://www.php.net/)
-[![Laravel](https://img.shields.io/badge/laravel-12%20%7C%2013-ff2d20)](https://laravel.com/)
-[![License](https://img.shields.io/badge/license-MIT-green)](LICENSE.md)
+<p align="center">
+  <a href="https://packagist.org/packages/osamaelnagar/oomycache"><img src="https://img.shields.io/packagist/v/osamaelnagar/oomycache?style=flat-square&color=22d3a7" alt="Latest version"></a>
+  <a href="https://packagist.org/packages/osamaelnagar/oomycache"><img src="https://img.shields.io/packagist/dt/osamaelnagar/oomycache?style=flat-square&color=14b8a6" alt="Total downloads"></a>
+  <a href="https://packagist.org/packages/osamaelnagar/oomycache"><img src="https://img.shields.io/badge/PHP-8.3%2B-777bb4?style=flat-square" alt="PHP 8.3+"></a>
+  <a href="https://packagist.org/packages/osamaelnagar/oomycache"><img src="https://img.shields.io/badge/Laravel-12%20%7C%2013-ff2d20?style=flat-square" alt="Laravel 12 / 13"></a>
+  <a href="https://packagist.org/packages/osamaelnagar/oomycache-filament"><img src="https://img.shields.io/badge/Filament-optional-6f7dff?style=flat-square" alt="Filament bridge optional"></a>
+  <a href="https://github.com/OsamaElnagar/oomycache/stargazers"><img src="https://img.shields.io/github/stars/OsamaElnagar/oomycache?style=flat-square&color=ff9bd6" alt="GitHub stars"></a>
+  <a href="https://github.com/OsamaElnagar/oomycache/actions/workflows/tests.yml"><img src="https://github.com/OsamaElnagar/oomycache/actions/workflows/tests.yml/badge.svg" alt="Tests"></a>
+  <a href="LICENSE.md"><img src="https://img.shields.io/badge/license-MIT-22d3a7?style=flat-square" alt="MIT license"></a>
+</p>
 
 > **Status:** public alpha (`v0.1.0-alpha.*`). Core engine, tenancy, payload hardening and the
 > optional Filament bridge are implemented and tested; see [`docs/implementation`](docs/implementation).
@@ -159,6 +170,15 @@ The package was dogfooded in a real Filament 5 ERP app (4 resources, relation ma
 forms, custom page/actions, widgets, plain-Livewire front-office pages) with 3,000 products /
 2,500 purchase orders / 5,000 invoices; warm Filament list pages execute **zero** ERP-table queries.
 See [`docs/implementation/phase-1-dogfood.md`](docs/implementation/phase-1-dogfood.md).
+
+## For AI agents (Laravel Boost)
+
+The package ships a Laravel Boost skill at
+[`resources/boost/skills/oomycache-development/SKILL.md`](resources/boost/skills/oomycache-development/SKILL.md).
+When the package is installed in a Laravel app, Boost-aware agents discover it automatically and get
+installation, configuration, per-query API, invalidation, command, tenancy and anti-pattern guidance —
+including the Filament bridge being optional. The package-level [`AGENTS.md`](AGENTS.md) documents the
+maintenance conventions for agents working on OoMyCache itself.
 
 ## Documentation
 

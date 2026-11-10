@@ -1,28 +1,55 @@
-# Oomycache
+# OoMyCache
 
-This repository is a Laravel package. Keep the package focused, idiomatic, and easy for Laravel developers to install, test, and maintain.
+OoMyCache is a Laravel package: transparent, correctness-first Eloquent query caching with
+version-token invalidation and an optional Filament 5 bridge.
 
-## Package Conventions
+## Package conventions
 
-- Use Laravel-native package APIs and the existing service provider shape before adding abstractions.
-- Keep package names, namespaces, Composer metadata, publish tags, documentation, and examples aligned with `osamaelnagar/oomycache`.
-- Add only the files and dependencies needed for the package behavior being implemented.
-- Prefer explicit Laravel package code over helper abstractions unless the extension point is real.
-- Keep tests focused on observable package behavior through public APIs, service provider wiring, commands, routes, published resources, and documentation promises.
+- Keep the **core framework-agnostic**. Never add Filament/Livewire dependencies to
+  `packages/OoMyCache`; Filament integration belongs in `packages/OoMyCacheFilament`.
+- Preserve the existing service-provider shape and public API. Prefer Laravel-native package APIs.
+- Keep package names, namespaces, Composer metadata, documentation and examples aligned with
+  `osamaelnagar/oomycache` (core) and `osamaelnagar/oomycache-filament` (bridge).
+- Add only the files/dependencies needed for the behavior being implemented.
+- Every behavior change needs a Pest test through public APIs, service-provider wiring, commands or
+  the builder. Keep the package gates green.
+- Update the bundled Boost skill (`resources/boost/skills/oomycache-development/SKILL.md`) and docs
+  when public behavior/config changes.
 
-## Quick Commands
+## Architecture map
+
+- `src/Builder/QueryCacheBuilder.php` + `src/Builder/QueryCacheQueryBuilder.php` — caching builders.
+- `src/Cache/QueryCacheEngine.php` — classify, key, cache/read, TTL, version tokens, payload decode.
+- `src/Cache/CacheVersionStore.php` — per-connection+table version namespaces.
+- `src/Invalidation/InvalidationManager.php` — Eloquent events → version bumps (afterCommit aware).
+- `src/Payload/*` — arrays-JSON codec, compression, chunking.
+- `src/Query/*` — fingerprinting, dependency recording, eager-load resolution.
+- `src/Tenant/*`, `src/Contracts/TenantResolver.php` — tenant/panel/user key segments, fail-closed.
+- `config/oomycache.php` — the complete config surface; validate with `oomycache:doctor`.
+- `src/Console/Commands/*` — status, clear, doctor, bench, prune.
+
+## Quick commands
 
 - Full validation: `composer test`
-- Formatting check: `composer lint:check`
+- Format: `composer lint`
+- Format check: `composer lint:check`
 - Static analysis: `composer analyse`
-- Pest tests: `composer test:unit`
-- Workbench build: `composer build`
-- Workbench server: `composer serve`
+- Pest: `composer test:unit`
+- Workbench build/server: `composer build`, `composer serve`
 
-## Local Skills
+Run from `packages/OoMyCache`. The app-level dogfood suite lives in the host app
+(`php artisan test --compact`).
 
-- `package-scaffold`: use when adding package capabilities or wiring them through the service provider, including commands, migrations, routes, config, views, translations, assets, middleware, publish tags, workbench files, and console-only behavior.
-- `package-testing`: use when adding or changing package tests with Pest 4/5 and Orchestra Testbench.
-- `package-release`: use when preparing changelog, release notes, tags, or GitHub release workflow changes.
-- `package-compatibility`: use when reviewing code, dependencies, or CI against the PHP and Laravel support matrix.
-- `package-generate-skill`: use when updating the bundled Boost skill from the package implementation, README, and examples.
+## Agent skill
+
+`resources/boost/skills/oomycache-development/SKILL.md` is the adoption guide shipped to Laravel Boost
+agents. Keep it focused on installing/configuring OoMyCache in an app, not package internals.
+
+## Boundaries
+
+- Do not commit `composer.lock`, `vendor/`, `build/` or PHPUnit caches.
+- Do not claim Filament is required; the core works in any Laravel app.
+- Do not soften the correctness model: invalidations are version-token based, raw/quiet/pivot writes
+  need an explicit flush, and `Cache::flush()` is never used.
+- Before tagging, follow `docs/implementation/release-checklist.md` and run
+  `scripts/release-rehearsal.ps1`.
