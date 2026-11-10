@@ -106,7 +106,7 @@ public function queryCacheOptions(): array
 | `oomycache:status` | configuration, store capabilities, cacheable models, version tokens, optional stats counters |
 | `oomycache:clear [--model=…]` | invalidate one/many models (or the whole namespace) |
 | `oomycache:doctor` | diagnose store support, payload mode, common traps |
-| `oomycache:bench {model}` | cold vs warm app-query counts and timings for a cacheable model (`--limit`, `--samples`, `--json`) |
+| `oomycache:bench {model}` | cold vs warm app-query counts and timings for a cacheable model (`--limit`, `--samples`, `--json`); isolated benchmark keys, no global cache clear unless `--clear` |
 | `oomycache:prune` | delete expired database-cache rows (keyset-ordered, expiry-guarded; `--dry-run`, `--chunk`, `--max-seconds`; schedule hourly) |
 
 ## Filament compatibility
@@ -119,7 +119,7 @@ The Phase-2 bridge is a standalone companion package, [`osamaelnagar/oomycache-f
 
 - a Filament-aware **tenant resolver**: the current panel is part of every cache key, and tenancy
   active without a resolved tenant **fails closed** (query runs uncached);
-- an `/admin/query-cache` **Query Cache studio** page: store status, cacheable models + version
+- a `{panel-path}/query-cache` **Query Cache studio** page (e.g. `/admin/query-cache`, or `/query-cache` on a panel with path `''`): store status, cacheable models + version
   tokens, live stats counters, selective model invalidation and a global purge action;
 - an `ActionCalled` **invalidator** for Filament actions that bypass Eloquent events
   (attach/detach/associate/dissociate/reorder/import and the bulk mass branches).

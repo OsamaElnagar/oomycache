@@ -103,7 +103,7 @@ public function queryCacheOptions(): array
 ```bash
 php artisan oomycache:status     # store, capabilities, cacheable models, tokens, stats
 php artisan oomycache:doctor     # validates configuration; exits 1 on invalid values
-php artisan oomycache:bench "App\Models\Product" --limit=50 --samples=3 --json
+php artisan oomycache:bench "App\Models\Product" --limit=50 --samples=3 --json  # isolated keys; use --clear only to wipe the app cache
 php artisan oomycache:prune      # database store only; expiry-guarded, cache_locks untouched
 php artisan oomycache:clear      # global version bump (never Cache::flush)
 ```
@@ -126,7 +126,7 @@ Read `config/oomycache.php` and `docs/implementation/config-reference.md` instea
 
 ## Filament bridge (optional)
 
-- `/admin/query-cache` studio: store status, cacheable models + version tokens, stats counters,
+- `{panel-path}/query-cache` studio (e.g. `/admin/query-cache`, or `/query-cache` when the panel path is `''`): store status, cacheable models + version tokens, stats counters,
   selective invalidation and a global purge (both gated by `can_purge`).
 - Tenant resolver: panel id in every key; panel tenancy without a resolved tenant fails closed.
 - `ActionCalled` invalidator for attach/detach/associate/dissociate/reorder/import and bulk actions.
@@ -138,7 +138,7 @@ Read `config/oomycache.php` and `docs/implementation/config-reference.md` instea
 ```bash
 composer test                         # package CI (Pint + PHPStan + 100% types + Pest)
 php artisan oomycache:doctor
-php artisan oomycache:bench "App\Models\Product" --limit=50 --samples=3 --json
+php artisan oomycache:bench "App\Models\Product" --limit=50 --samples=3 --json  # isolated keys; use --clear only to wipe the app cache
 php artisan test --compact            # app suite
 ```
 

@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Oomycache\Oomycache\Cache\QueryCacheEngine;
+use Oomycache\Oomycache\Contracts\VersionStore;
 use Workbench\App\Models\Category;
 use Workbench\App\Models\Product;
 
@@ -55,6 +56,39 @@ it('runs the bench command for a cacheable model', function (): void {
     ])
         ->expectsOutputToContain('OoMyCache bench')
         ->assertSuccessful();
+});
+
+it('does not clear the application cache during a bench by default', function (): void {
+    Category::query()->create(['name' => 'Bench category 3', 'is_active' => true]);
+    Product::query()->create(['sku' => 'BENCH-3', 'name' => 'Bench product 3', 'is_active' => true]);
+
+    $versions = app(VersionStore::class);
+    $before = $versions->global();
+
+    $this->artisan('oomycache:bench', [
+        'model' => Product::class,
+        '--limit' => 2,
+        '--samples' => 1,
+    ])->assertSuccessful();
+
+    expect($versions->global())->toBe($before);
+});
+
+it('clears the global token only when --clear is passed', function (): void {
+    Category::query()->create(['name' => 'Bench category 4', 'is_active' => true]);
+    Product::query()->create(['sku' => 'BENCH-4', 'name' => 'Bench product 4', 'is_active' => true]);
+
+    $versions = app(VersionStore::class);
+    $before = $versions->global();
+
+    $this->artisan('oomycache:bench', [
+        'model' => Product::class,
+        '--limit' => 2,
+        '--samples' => 1,
+        '--clear' => true,
+    ])->assertSuccessful();
+
+    expect($versions->global())->not->toBe($before);
 });
 
 it('returns JSON from the bench command', function (): void {
