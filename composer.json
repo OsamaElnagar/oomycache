@@ -1,0 +1,121 @@
+{
+    "$schema": "https://getcomposer.org/schema.json",
+    "name": "osamaelnagar/oomycache",
+    "description": "Eloquent query caching for Laravel — built for Filament-scale data.",
+    "keywords": [
+        "laravel",
+        "cache",
+        "eloquent",
+        "query-cache",
+        "filament",
+        "osamaelnagar",
+        "oomycache"
+    ],
+    "homepage": "https://github.com/osamaelnagar/oomycache",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Osama Mohammed Elnagar",
+            "email": "osamaelngar98@gmail.com",
+            "role": "Developer"
+        }
+    ],
+    "require": {
+        "php": "^8.3",
+        "illuminate/cache": "^12.0||^13.0",
+        "illuminate/console": "^12.0||^13.0",
+        "illuminate/contracts": "^12.0||^13.0",
+        "illuminate/database": "^12.0||^13.0",
+        "illuminate/support": "^12.0||^13.0"
+    },
+    "require-dev": {
+        "larastan/larastan": "^3.9",
+        "laravel/agent-detector": "^2.0",
+        "laravel/chisel": "^0.1",
+        "laravel/pint": "^1.29",
+        "laravel/prompts": "^0.3",
+        "laravel/pao": "^1.0",
+        "orchestra/testbench": "^10.0||^11.0",
+        "pestphp/pest": "^4.6||^5.0",
+        "pestphp/pest-plugin-laravel": "^4.1||^5.0",
+        "pestphp/pest-plugin-type-coverage": "^4.0||^5.0",
+        "phpstan/extension-installer": "^1.4"
+    },
+    "suggest": {
+        "filament/filament": "Required for the optional Filament cache management page/widgets (plan/04).",
+        "livewire/livewire": "Required for the optional Filament bridge."
+    },
+    "autoload": {
+        "psr-4": {
+            "Oomycache\\Oomycache\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Oomycache\\Oomycache\\Tests\\": "tests/",
+            "Workbench\\App\\": "workbench/app/",
+            "Workbench\\Database\\Factories\\": "workbench/database/factories/",
+            "Workbench\\Database\\Seeders\\": "workbench/database/seeders/"
+        }
+    },
+    "scripts": {
+        "post-autoload-dump": [
+            "@clear",
+            "@prepare"
+        ],
+        "prepare": [
+            "@php vendor/bin/testbench package:discover --ansi"
+        ],
+        "build": [
+            "@php vendor/bin/testbench workbench:build --ansi"
+        ],
+        "serve": [
+            "Composer\\Config::disableProcessTimeout",
+            "@build",
+            "@php vendor/bin/testbench serve --ansi"
+        ],
+        "lint": [
+            "vendor/bin/pint --parallel"
+        ],
+        "lint:check": [
+            "vendor/bin/pint --parallel --test"
+        ],
+        "analyse": [
+            "vendor/bin/phpstan analyse"
+        ],
+        "test:types": [
+            "vendor/bin/pest --type-coverage --min=100"
+        ],
+        "test:unit": [
+            "vendor/bin/pest --parallel"
+        ],
+        "test": [
+            "@analyse",
+            "@lint:check",
+            "@test:types",
+            "@test:unit"
+        ],
+        "clear": [
+            "@php vendor/bin/testbench package:purge-skeleton --ansi"
+        ]
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Oomycache\\Oomycache\\OomycacheServiceProvider"
+            ],
+            "aliases": {
+                "Oomycache": "Oomycache\\Oomycache\\Facades\\Oomycache"
+            }
+        }
+    },
+    "config": {
+        "sort-packages": true,
+        "allow-plugins": {
+            "pestphp/pest-plugin": true,
+            "phpstan/extension-installer": true
+        }
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}

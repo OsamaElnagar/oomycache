@@ -1,0 +1,17 @@
+parameters:
+    level: 7
+    paths:
+        - src
+        - config
+        - database
+        - routes
+    tmpDir: build/phpstan
+    ignoreErrors:
+        - identifier: larastan.noEnvCallsOutsideOfConfig
+          path: config/oomycache.php
+        - identifier: larastan.noUnnecessaryCollectionCall
+          paths:
+              - src/Builder/QueryCacheBuilder.php
+        - identifier: trait.unused
+          paths:
+              - src/Concerns/HasQueryCache.php

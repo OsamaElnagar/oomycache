@@ -1,0 +1,329 @@
+# Driver matrix — Redis, Memcached, MySQL and PostgreSQL lanes.
+#
+# Scope and expectations (see docs/implementation/driver-matrix.md):
+#   * Nightly + manual + path-filtered main pushes. This lane is NOT the PR gate;
+#     `.github/workflows/tests.yml` remains the per-PR matrix.
+#   * The package suite runs on Testbench's sqlite `:memory:` connection, so the
+#     external drivers are proven by an explicit connectivity probe against the
+#     service container followed by the full suite with the driver env present.
+#     The driver jobs are therefore smoke lanes: they prove the client extension
+#     and credentials work and that the suite stays green with that configuration.
+#   * This file assumes the package repository root. While the package still lives
+#     at packages/OoMyCache inside the dogfood monorepo, GitHub ignores it (only the
+#     app root .github/workflows runs); it becomes live once the package is split
+#     into its own repository.
+
+name: driver-matrix
+
+on:
+  schedule:
+    - cron: '30 2 * * *'
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/driver-matrix.yml'
+      - 'composer.json'
+      - 'config/oomycache.php'
+      - 'src/Cache/**'
+      - 'src/Payload/**'
+      - 'tests/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  COMPOSER_NO_INTERACTION: '1'
+
+jobs:
+  # Baseline: the same suite the PR gate runs, on the two edges of the PHP matrix.
+  sqlite:
+    name: sqlite - PHP ${{ matrix.php }} - Laravel ${{ matrix.laravel }} - ${{ matrix.stability }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - php: '8.3'
+            laravel: '12.*'
+            testbench: '10.*'
+            stability: prefer-lowest
+          - php: '8.5'
+            laravel: '13.*'
+            testbench: '11.*'
+            stability: prefer-stable
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: dom, curl, libxml, mbstring, zip, fileinfo, sqlite, pdo_sqlite, bcmath, intl
+          ini-values: error_reporting=E_ALL
+          tools: composer:v2
+          coverage: none
+
+      - name: Install dependencies
+        run: |
+          composer require "laravel/framework:${{ matrix.laravel }}" "orchestra/testbench:${{ matrix.testbench }}" --no-interaction --no-update
+          composer update --${{ matrix.stability }} --prefer-dist --no-interaction --no-progress --no-scripts
+          composer run prepare
+
+      - name: Test suite
+        run: composer test:unit
+
+  redis:
+    name: redis - PHP 8.4 - Laravel 13
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+    env:
+      CACHE_STORE: redis
+      REDIS_CLIENT: phpredis
+      REDIS_HOST: 127.0.0.1
+      REDIS_PORT: '6379'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup PHP (phpredis)
+        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # v2
+        with:
+          php-version: '8.4'
+          extensions: dom, curl, libxml, mbstring, zip, fileinfo, sqlite, pdo_sqlite, bcmath, intl, redis
+          ini-values: error_reporting=E_ALL
+          tools: composer:v2
+          coverage: none
+
+      - name: Install dependencies
+        run: |
+          composer require "laravel/framework:13.*" "orchestra/testbench:11.*" --no-interaction --no-update
+          composer update --prefer-stable --prefer-dist --no-interaction --no-progress --no-scripts
+          composer run prepare
+
+      - name: Redis connectivity probe
+        run: |
+          php -r '
+          $host = getenv("REDIS_HOST") ?: "127.0.0.1";
+          $port = (int) (getenv("REDIS_PORT") ?: 6379);
+          $redis = new Redis();
+          $redis->connect($host, $port, 2.0);
+          $pong = $redis->ping();
+          echo "redis PING: ".var_export($pong, true).PHP_EOL;
+          $redis->set("oomycache:ci", "ok", 30);
+          if ($redis->get("oomycache:ci") !== "ok") {
+              fwrite(STDERR, "redis set/get failed".PHP_EOL);
+              exit(1);
+          }
+          $redis->del("oomycache:ci");
+          echo "redis set/get/del OK".PHP_EOL;
+          '
+
+      - name: Test suite
+        run: composer test:unit
+
+  # Experimental: the PECL memcached build is the flakiest part of this lane, so a
+  # failure is reported but non-blocking until it has a stable run history.
+  memcached:
+    name: memcached - PHP 8.4 - Laravel 13 (experimental)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    continue-on-error: true
+    services:
+      memcached:
+        image: memcached:1.6-alpine
+        ports:
+          - 11211:11211
+    env:
+      CACHE_STORE: memcached
+      MEMCACHED_HOST: 127.0.0.1
+      MEMCACHED_PORT: '11211'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup PHP (memcached extension)
+        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # v2
+        with:
+          php-version: '8.4'
+          extensions: dom, curl, libxml, mbstring, zip, fileinfo, sqlite, pdo_sqlite, bcmath, intl, memcached
+          ini-values: error_reporting=E_ALL
+          tools: composer:v2
+          coverage: none
+
+      - name: Install dependencies
+        run: |
+          composer require "laravel/framework:13.*" "orchestra/testbench:11.*" --no-interaction --no-update
+          composer update --prefer-stable --prefer-dist --no-interaction --no-progress --no-scripts
+          composer run prepare
+
+      - name: Memcached connectivity probe
+        run: |
+          php -r '
+          $host = getenv("MEMCACHED_HOST") ?: "127.0.0.1";
+          $port = (int) (getenv("MEMCACHED_PORT") ?: 11211);
+          $deadline = time() + 30;
+          do {
+              try {
+                  $memcached = new Memcached();
+                  $memcached->addServer($host, $port);
+                  $memcached->set("oomycache:ci", "ok", 30);
+                  if ($memcached->get("oomycache:ci") === "ok") {
+                      $memcached->delete("oomycache:ci");
+                      echo "memcached set/get/del OK".PHP_EOL;
+                      exit(0);
+                  }
+              } catch (Throwable $exception) {
+                  fwrite(STDERR, $exception->getMessage().PHP_EOL);
+              }
+              sleep(1);
+          } while (time() < $deadline);
+          fwrite(STDERR, "memcached probe failed after 30s".PHP_EOL);
+          exit(1);
+          '
+
+      - name: Test suite
+        run: composer test:unit
+
+  mysql:
+    name: mysql - PHP 8.4 - Laravel 13
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_DATABASE: oomycache
+          MYSQL_USER: oomycache
+          MYSQL_PASSWORD: oomycache
+          MYSQL_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    env:
+      DB_CONNECTION: mysql
+      DB_HOST: 127.0.0.1
+      DB_PORT: '3306'
+      DB_DATABASE: oomycache
+      DB_USERNAME: oomycache
+      DB_PASSWORD: oomycache
+      OOMYCACHE_TEST_DB: mysql
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup PHP (pdo_mysql)
+        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # v2
+        with:
+          php-version: '8.4'
+          extensions: dom, curl, libxml, mbstring, zip, fileinfo, sqlite, pdo_sqlite, pdo_mysql, bcmath, intl
+          ini-values: error_reporting=E_ALL
+          tools: composer:v2
+          coverage: none
+
+      - name: Install dependencies
+        run: |
+          composer require "laravel/framework:13.*" "orchestra/testbench:11.*" --no-interaction --no-update
+          composer update --prefer-stable --prefer-dist --no-interaction --no-progress --no-scripts
+          composer run prepare
+
+      - name: MySQL connectivity probe
+        run: |
+          php -r '
+          $pdo = new PDO(
+              sprintf("mysql:host=%s;port=%s;dbname=%s", getenv("DB_HOST"), getenv("DB_PORT"), getenv("DB_DATABASE")),
+              (string) getenv("DB_USERNAME"),
+              (string) getenv("DB_PASSWORD"),
+              [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION],
+          );
+          echo "mysql: ".$pdo->query("SELECT VERSION()")->fetchColumn().PHP_EOL;
+          '
+
+      - name: Test suite
+        run: composer test:unit
+
+  postgres:
+    name: postgres - PHP 8.4 - Laravel 13
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: oomycache
+          POSTGRES_USER: oomycache
+          POSTGRES_PASSWORD: oomycache
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U oomycache -d oomycache"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    env:
+      DB_CONNECTION: pgsql
+      DB_HOST: 127.0.0.1
+      DB_PORT: '5432'
+      DB_DATABASE: oomycache
+      DB_USERNAME: oomycache
+      DB_PASSWORD: oomycache
+      OOMYCACHE_TEST_DB: pgsql
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup PHP (pdo_pgsql)
+        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # v2
+        with:
+          php-version: '8.4'
+          extensions: dom, curl, libxml, mbstring, zip, fileinfo, sqlite, pdo_sqlite, pdo_pgsql, bcmath, intl
+          ini-values: error_reporting=E_ALL
+          tools: composer:v2
+          coverage: none
+
+      - name: Install dependencies
+        run: |
+          composer require "laravel/framework:13.*" "orchestra/testbench:11.*" --no-interaction --no-update
+          composer update --prefer-stable --prefer-dist --no-interaction --no-progress --no-scripts
+          composer run prepare
+
+      - name: PostgreSQL connectivity probe
+        run: |
+          php -r '
+          $pdo = new PDO(
+              sprintf("pgsql:host=%s;port=%s;dbname=%s", getenv("DB_HOST"), getenv("DB_PORT"), getenv("DB_DATABASE")),
+              (string) getenv("DB_USERNAME"),
+              (string) getenv("DB_PASSWORD"),
+              [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION],
+          );
+          echo "postgres: ".$pdo->query("SELECT version()")->fetchColumn().PHP_EOL;
+          '
+
+      - name: Test suite
+        run: composer test:unit

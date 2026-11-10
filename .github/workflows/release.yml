@@ -1,0 +1,387 @@
+# Release workflow for the standalone `osamaelnagar/oomycache` repository.
+#
+# IMPORTANT — repository layout assumption: the package currently lives inside
+# the OoMyCache dogfood app at `packages/OoMyCache` and is NOT its own git
+# repository yet, so GitHub cannot execute this file today. Once the package
+# directory is split out and pushed to
+# https://github.com/osamaelnagar/oomycache, pushing a `v*` tag runs:
+#
+#   validate (tag ↔ composer.json ↔ CHANGELOG.md) -> composer test -> GitHub Release
+#
+# Release bodies are the matching CHANGELOG.md section (or Unreleased before the
+# changelog is promoted) followed by GitHub auto-generated notes. The manual
+# `workflow_dispatch` entry point is a dry run by default: it validates and runs
+# the full test gate but does not publish.
+#
+# Extraction/migration commands and the full launch checklist live in
+# `docs/implementation/release-checklist.md` (sections 1, 3 and 8).
+
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag to validate/release (vX.Y.Z). Leave empty to use the latest tag.'
+        required: false
+        default: ''
+        type: string
+      dry_run:
+        description: 'Validate and test only; do not create the GitHub Release.'
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.repository }}-${{ github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  PACKAGE_NAME: osamaelnagar/oomycache
+  EXPECTED_HOMEPAGE: https://github.com/osamaelnagar/oomycache
+  MIN_PHP: '8.3'
+  COMPOSER_PROCESS_TIMEOUT: '1200'
+
+jobs:
+  validate:
+    name: Validate tag, package identity & changelog
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      tag: ${{ steps.meta.outputs.tag }}
+      version: ${{ steps.meta.outputs.version }}
+      prerelease: ${{ steps.meta.outputs.prerelease }}
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || false }}
+      TAG_INPUT: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || '' }}
+    steps:
+      - name: Checkout (full history + tags)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+          fetch-depth: 0
+
+      - name: Setup PHP for composer.json inspection
+        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # v2
+        with:
+          php-version: '8.3'
+          coverage: none
+          tools: composer:v2
+
+      - name: Validate tag, package identity & changelog
+        id: meta
+        run: |
+          set -euo pipefail
+
+          read_composer() {
+            php -r '
+              $config = json_decode(file_get_contents("composer.json"), true, 512, JSON_THROW_ON_ERROR);
+              $value = $config;
+              foreach (explode(".", $argv[1]) as $key) {
+                  $value = is_array($value) ? ($value[$key] ?? null) : null;
+              }
+              if (is_array($value)) {
+                  echo implode(",", $value);
+              } elseif (is_bool($value)) {
+                  echo $value ? "true" : "false";
+              } else {
+                  echo (string) $value;
+              }
+            ' "$1"
+          }
+
+          has_changelog_heading() {
+            awk -v want="$1" '
+              /^##[[:space:]]+/ {
+                heading = $0
+                sub(/^##[[:space:]]+/, "", heading)
+                gsub(/[\[\]]/, "", heading)
+                sub(/[[:space:]]+-[[:space:]]+.*$/, "", heading)
+                sub(/[[:space:]]+$/, "", heading)
+                if (heading == want) { found = 1; exit }
+              }
+              END { exit(found ? 0 : 1) }
+            ' CHANGELOG.md
+          }
+
+          TAG="${TAG_INPUT:-}"
+          if [ -z "$TAG" ]; then
+            TAG="$(git describe --tags --abbrev=0 2>/dev/null || true)"
+            if [ -z "$TAG" ]; then
+              echo "::error::No tag input supplied and the repository has no tags yet."
+              exit 1
+            fi
+            echo "::notice::No tag input supplied; validating the latest tag [$TAG]."
+          fi
+          echo "Validating release tag: $TAG"
+
+          # 1. SemVer shape: v<major>.<minor>.<patch>[-prerelease][+build]
+          if ! printf '%s' "$TAG" | grep -Eq '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$'; then
+            echo "::error::Tag [$TAG] is not a SemVer tag like v1.2.3 or v1.2.3-beta.1."
+            exit 1
+          fi
+
+          VERSION="${TAG#v}"
+          PRERELEASE="false"
+          case "$VERSION" in
+            *-*) PRERELEASE="true" ;;
+          esac
+
+          # 2. The tag must exist and be referenced by the checked-out ref.
+          TAG_COMMIT="$(git rev-parse "$TAG^{commit}")"
+          if [ "${GITHUB_REF_TYPE:-}" = "tag" ] && [ "$(git rev-parse HEAD)" != "$TAG_COMMIT" ]; then
+            echo "::error::Checked out ${GITHUB_REF_NAME:-ref} does not point at $TAG."
+            exit 1
+          fi
+
+          if [ "$(git cat-file -t "refs/tags/$TAG")" != "tag" ]; then
+            echo "::warning::[$TAG] is a lightweight tag. Annotated tags (git tag -a) preserve author/date metadata in GitHub releases."
+          fi
+
+          # 3. Release tags are cut from the default branch.
+          if git fetch --no-tags origin main >/dev/null 2>&1; then
+            MAIN_REF="origin/main"
+          elif git fetch --no-tags origin master >/dev/null 2>&1; then
+            MAIN_REF="origin/master"
+          else
+            echo "::error::Could not fetch origin/main or origin/master to verify the release branch."
+            exit 1
+          fi
+
+          if ! git merge-base --is-ancestor "$TAG_COMMIT" "$MAIN_REF"; then
+            echo "::error::[$TAG] is not an ancestor of $MAIN_REF. Release tags must be cut from the default branch."
+            exit 1
+          fi
+
+          # 4. Tags must move forward: the pushed tag has to be the newest tag.
+          #    versionsort.suffix=- makes prereleases sort below their base tag
+          #    (v0.1.0 > v0.1.0-beta.1), which plain `--sort=-v:refname` does not.
+          NEWEST_TAG="$(git -c versionsort.suffix=- tag --list 'v*' --sort=-v:refname | head -n 1 || true)"
+          if [ -n "$NEWEST_TAG" ] && [ "$NEWEST_TAG" != "$TAG" ]; then
+            if [ "${DRY_RUN:-false}" = "true" ]; then
+              echo "::warning::[$TAG] is not the newest tag ([$NEWEST_TAG] is); dry run continues."
+            else
+              echo "::error::[$TAG] is not the newest tag ([$NEWEST_TAG] is newer). Cut a new version instead of re-tagging history."
+              exit 1
+            fi
+          fi
+
+          # 5. composer.json identity — the tag publishes the package as-is.
+          COMPOSER_NAME="$(read_composer name)"
+          if [ "$COMPOSER_NAME" != "$PACKAGE_NAME" ]; then
+            echo "::error::composer.json name is [$COMPOSER_NAME]; this repository must publish [$PACKAGE_NAME]."
+            exit 1
+          fi
+
+          HOMEPAGE="$(read_composer homepage)"
+          if [ "$HOMEPAGE" != "$EXPECTED_HOMEPAGE" ]; then
+            echo "::error::composer.json homepage is [$HOMEPAGE]; expected [$EXPECTED_HOMEPAGE]."
+            exit 1
+          fi
+
+          COMPOSER_VERSION="$(read_composer version)"
+          if [ -n "$COMPOSER_VERSION" ] && [ "$COMPOSER_VERSION" != "$VERSION" ]; then
+            echo "::error::composer.json declares version [$COMPOSER_VERSION] but the tag says [$VERSION]. Composer packages should derive the version from the tag — remove the explicit version field."
+            exit 1
+          fi
+
+          PHP_CONSTRAINT="$(read_composer require.php)"
+          case "$PHP_CONSTRAINT" in
+            *8.3*) : ;;
+            *) echo "::warning::require.php is [$PHP_CONSTRAINT]; expected it to allow PHP $MIN_PHP+." ;;
+          esac
+
+          # 6. CHANGELOG must be promotable for this version (or at least have Unreleased).
+          if [ ! -f CHANGELOG.md ]; then
+            echo "::error::CHANGELOG.md is missing."
+            exit 1
+          fi
+
+          if has_changelog_heading "$VERSION"; then
+            echo "::notice::Using the [$VERSION] CHANGELOG section for the release body."
+          elif has_changelog_heading "Unreleased"; then
+            echo "::notice::CHANGELOG has no [$VERSION] section yet; the Unreleased section seeds the release body and the post-release changelog workflow promotes it."
+          else
+            echo "::error::CHANGELOG.md has neither a [$VERSION] nor an Unreleased section."
+            exit 1
+          fi
+
+          # 7. One GitHub Release per tag (dry runs only warn).
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            if [ "${DRY_RUN:-false}" = "true" ]; then
+              echo "::warning::GitHub Release [$TAG] already exists; dry run continues without publishing."
+            else
+              echo "::error::GitHub Release [$TAG] already exists. Delete it and re-tag, or cut a new patch version."
+              exit 1
+            fi
+          fi
+
+          echo "Release metadata: tag=$TAG version=$VERSION prerelease=$PRERELEASE"
+          {
+            echo "tag=$TAG"
+            echo "version=$VERSION"
+            echo "prerelease=$PRERELEASE"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Dry-run summary
+        if: github.event_name == 'workflow_dispatch' && inputs.dry_run
+        run: |
+          {
+            echo "### Release dry run — nothing published"
+            echo ""
+            echo "| Field | Value |"
+            echo "| --- | --- |"
+            echo "| Package | \`$PACKAGE_NAME\` |"
+            echo "| Tag | \`${{ steps.meta.outputs.tag }}\` |"
+            echo "| Version | \`${{ steps.meta.outputs.version }}\` |"
+            echo "| Pre-release | \`${{ steps.meta.outputs.prerelease }}\` |"
+            echo ""
+            echo "Validation passed. The test gate still runs; no GitHub Release will be created."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  test:
+    name: Full test gate (composer test)
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.validate.outputs.tag }}
+          fetch-depth: 1
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # v2
+        with:
+          php-version: '8.3'
+          extensions: dom, curl, libxml, mbstring, zip, fileinfo, sqlite, pdo_sqlite, bcmath, intl
+          ini-values: error_reporting=E_ALL
+          tools: composer:v2
+          coverage: none
+
+      - name: Install dependencies
+        run: |
+          composer update --prefer-dist --no-interaction --no-progress --no-scripts
+
+      - name: Prepare Testbench workbench
+        run: composer run prepare
+
+      - name: Run composer test (PHPStan + Pint + type coverage + Pest)
+        run: composer test
+
+  release:
+    name: Create GitHub Release
+    needs:
+      - validate
+      - test
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.dry_run == false)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      TAG: ${{ needs.validate.outputs.tag }}
+      VERSION: ${{ needs.validate.outputs.version }}
+      PRERELEASE: ${{ needs.validate.outputs.prerelease }}
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.validate.outputs.tag }}
+          fetch-depth: 0
+
+      - name: Ensure the release does not exist yet
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::error::GitHub Release [$TAG] already exists; refusing to overwrite it."
+            exit 1
+          fi
+
+      - name: Build release notes (CHANGELOG section + auto-generated notes)
+        run: |
+          set -euo pipefail
+
+          extract_section() {
+            awk -v want="$1" '
+              /^##[[:space:]]+/ {
+                if (found) { exit }
+                heading = $0
+                sub(/^##[[:space:]]+/, "", heading)
+                gsub(/[\[\]]/, "", heading)
+                sub(/[[:space:]]+-[[:space:]]+.*$/, "", heading)
+                sub(/[[:space:]]+$/, "", heading)
+                if (heading == want) { found = 1; next }
+                next
+              }
+              found { print }
+            ' CHANGELOG.md
+          }
+
+          extract_section "$VERSION" > changelog-section.md
+          if [ ! -s changelog-section.md ]; then
+            extract_section "Unreleased" > changelog-section.md
+          fi
+
+          if [ ! -s changelog-section.md ]; then
+            echo "::warning::No CHANGELOG section for [$VERSION] or [Unreleased]; the release body will contain auto-generated notes only."
+          fi
+
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/releases/generate-notes" \
+            -f tag_name="$TAG" \
+            --jq '.body' > auto-generated-notes.md
+
+          {
+            if [ -s changelog-section.md ]; then
+              printf '## %s\n\n' "$VERSION"
+              cat changelog-section.md
+              printf '\n---\n\n'
+            fi
+            cat auto-generated-notes.md
+          } > release-notes.md
+
+          cat release-notes.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Create the GitHub Release
+        run: |
+          set -euo pipefail
+
+          if [ "$PRERELEASE" = "true" ]; then
+            gh release create "$TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --verify-tag \
+              --title "$TAG" \
+              --notes-file release-notes.md \
+              --prerelease
+          else
+            gh release create "$TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --verify-tag \
+              --title "$TAG" \
+              --notes-file release-notes.md \
+              --latest
+          fi
+
+      - name: Post-release summary
+        run: |
+          {
+            echo "### Released \`$TAG\`"
+            echo ""
+            echo "| Field | Value |"
+            echo "| --- | --- |"
+            echo "| Package | \`$PACKAGE_NAME\` |"
+            echo "| Version | \`$VERSION\` |"
+            echo "| Pre-release | \`$PRERELEASE\` |"
+            echo ""
+            echo "Next: let Packagist pick up the tag (usually < 1 minute), then run the"
+            echo "post-release smoke test in \`docs/implementation/release-checklist.md\`."
+          } >> "$GITHUB_STEP_SUMMARY"
