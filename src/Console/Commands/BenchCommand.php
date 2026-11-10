@@ -51,10 +51,15 @@ class BenchCommand extends Command
         // application cache entries are touched.
         $suffix = 'bench:'.bin2hex(random_bytes(8));
 
+        // Reset per-process memoization between samples: a warm sample must
+        // exercise the cache store like a new request would, not just the
+        // in-process request memo.
+        $engine->resetRuntimeState();
         $cold = $this->measure($model, $limit, $suffix);
         $warm = [];
 
         for ($i = 0; $i < $samples; $i++) {
+            $engine->resetRuntimeState();
             $warm[] = $this->measure($model, $limit, $suffix);
         }
 
@@ -65,6 +70,7 @@ class BenchCommand extends Command
             'model' => $model,
             'limit' => $limit,
             'cache_cleared' => $clear,
+            'memo_reset_per_sample' => true,
             'cold' => $cold,
             'warm_samples' => count($warm),
             'warm_avg_ms' => round($warmMs, 3),

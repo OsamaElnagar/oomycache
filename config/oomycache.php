@@ -260,6 +260,13 @@ return [
             // become visible. can_view optionally restricts the studio page.
             'can_view' => null,
             'can_purge' => null,
+
+            // Nav placement for the studio page. Keep null to inherit the
+            // panel's default group; set a string to place it explicitly, and
+            // set sort to a lower number to move it higher.
+            'navigation_label' => 'Query Cache',
+            'navigation_group' => null,
+            'navigation_sort' => null,
         ],
     ],
 

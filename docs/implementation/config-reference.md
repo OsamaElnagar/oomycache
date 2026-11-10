@@ -70,6 +70,9 @@
 | `model_presets` | `[]` | model class → preset name; unknown names fail doctor |
 | `filament.dashboard.can_view` | `null` | optional Gate for the companion studio page |
 | `filament.dashboard.can_purge` | `null` | **required** Gate for destructive studio actions (deny-by-default) |
+| `filament.dashboard.navigation_label` | `Query Cache` | studio navigation label |
+| `filament.dashboard.navigation_group` | `null` | studio navigation group; `null` inherits the panel default |
+| `filament.dashboard.navigation_sort` | `null` | studio navigation sort; lower values move it higher |
 
 ## 4. Removed in alpha (were advertised but unimplemented)
 
@@ -83,7 +86,7 @@
 | `safety.allow_serialized_models` | arrays-JSON only; no serialized model mode |
 | `payload.mode=models` | no models codec; `payload.mode` now only accepts `arrays` |
 | `tenant.include`, `tenant.user_resolver` | segment composition is resolver-driven; bridge uses `include_user` |
-| `filament.enabled/tenant_keys/panel_keys/flush_after_*` / dashboard nav keys | bridge is opt-in per panel via the plugin; only the two Gate names are read |
+| `filament.enabled/tenant_keys/panel_keys/flush_after_*` | bridge is opt-in per panel via the plugin; dashboard nav keys are now read (see §3) |
 
 ## 5. Validation rules enforced by `oomycache:doctor`
 
