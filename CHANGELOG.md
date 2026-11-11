@@ -1,5 +1,14 @@
 # Release Notes
 
+## 0.1.1 - 2026-11-11
+
+### Added
+
+- Production runbook, adoption checklist and deployment/store rollback guidance.
+- `scripts/benchmark-stores.ps1` and `scripts/benchmark-stores.sh` for host/store benchmarking.
+- `SECURITY.md` and `CONTRIBUTING.md`.
+- Agent-guide and Boost-skill links for the production/adoption docs.
+
 ## 0.1.0 - 2026-11-11
 
 First stable release of OoMyCache: transparent, correctness-first Eloquent query caching for
