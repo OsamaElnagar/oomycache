@@ -210,6 +210,9 @@ See [`docs/implementation/phase-2-progress.md`](docs/implementation/phase-2-prog
 - **Versioned invalidation.** A write bumps the table's version token; all cache keys embedding it
   become unreachable. No tags required on any driver. Cacheable models' `belongsToMany` pivot
   operations flush both sides automatically.
+- **One notification per logical write chain.** Builder flushes and Eloquent lifecycle events
+  (update, soft delete, restore, force delete) bump the token as needed, but audit/stats receive one
+  invalidation notification for the chain.
 - **Explicit raw-query invalidation.** `rememberQuery()` entries are versioned by the tables you list;
   `flushTables()` covers write paths that do not go through cacheable models.
 - **Fail-open reads, loud invalidation.** Cache outages fall back to the DB; failed invalidations are

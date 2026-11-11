@@ -30,7 +30,7 @@
 - Readmes/skills document panel-path-aware studio routes, file-store lifecycle, config:cache/worker
   restart requirements and long-running `resetRuntimeState()`.
 
-Released during this work: core `v0.1.0-alpha.10`, bridge `v0.1.0-alpha.9`.
+Released during this work: core `v0.1.0-alpha.11`, bridge `v0.1.0-alpha.9`.
 
 ## Verified behaviour
 
