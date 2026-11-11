@@ -58,10 +58,12 @@ final class QueryCacheEngine
     private array $requestMemo = [];
 
     /**
-     * Last invalidation event per connection/table, used to suppress the
-     * duplicate event emitted by Eloquent's update-then-saved write path.
+     * Last dispatched invalidation per connection/table. Eloquent write paths
+     * emit a builder flush followed by one or more model lifecycle events; the
+     * token must bump every time, but only the first event of a logical write
+     * chain may reach audit listeners/stats.
      *
-     * @var array<string, array{at: float, reason: string}>
+     * @var array<string, array{at: float, dispatched: string, last_seen: string}>
      */
     private array $lastInvalidationEvents = [];
 
@@ -624,10 +626,10 @@ final class QueryCacheEngine
     }
 
     /**
-     * Eloquent's model update/delete path flushes once through the builder and
-     * again through the saved/deleted event. The token must be bumped both
-     * times (the builder write and the model event are separate moments), but
-     * the duplicate notification should not reach audit listeners/stats.
+     * Eloquent's model write paths flush once through the builder and again
+     * through model lifecycle events. The token must be bumped every time (the
+     * builder write and the model event are separate moments), but a write
+     * chain should produce one audit/stats notification.
      */
     private function shouldDispatchInvalidation(string $table, ?string $connection, string $reason): bool
     {
@@ -635,18 +637,39 @@ final class QueryCacheEngine
         $now = microtime(true);
         $previous = $this->lastInvalidationEvents[$key] ?? null;
 
-        $this->lastInvalidationEvents[$key] = ['at' => $now, 'reason' => $reason];
+        if ($previous === null || $now - $previous['at'] > 0.1) {
+            $this->lastInvalidationEvents[$key] = [
+                'at' => $now,
+                'dispatched' => $reason,
+                'last_seen' => $reason,
+            ];
 
-        if ($previous === null || $now - $previous['at'] > 0.05) {
             return true;
         }
 
-        return ! in_array([$previous['reason'], $reason], [
-            ['update', 'saved'],
-            ['delete', 'deleted'],
-            ['forceDelete', 'forceDeleted'],
-            ['update', 'restored'],
-        ], true);
+        $continuations = [
+            'update' => ['saved', 'deleted', 'restored'],
+            'delete' => ['deleted'],
+            'forceDelete' => ['deleted', 'forceDeleted'],
+            'touch' => ['saved'],
+        ];
+
+        if (in_array($reason, $continuations[$previous['dispatched']] ?? [], true)
+            || in_array($reason, $continuations[$previous['last_seen']] ?? [], true)) {
+            $previous['at'] = $now;
+            $previous['last_seen'] = $reason;
+            $this->lastInvalidationEvents[$key] = $previous;
+
+            return false;
+        }
+
+        $this->lastInvalidationEvents[$key] = [
+            'at' => $now,
+            'dispatched' => $reason,
+            'last_seen' => $reason,
+        ];
+
+        return true;
     }
 
     public function flushModel(string $modelClass, string $reason = 'write'): void
