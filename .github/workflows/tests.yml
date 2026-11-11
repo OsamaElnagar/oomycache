@@ -57,6 +57,7 @@ jobs:
         run: composer analyse
 
       - name: Linter
+        if: runner.os != 'Windows'
         run: composer lint:check
 
       - name: Test Suite
