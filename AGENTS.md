@@ -48,6 +48,14 @@ Run from `packages/OoMyCache`. The app-level dogfood suite lives in the host app
 `resources/boost/skills/oomycache-development/SKILL.md` is the adoption guide shipped to Laravel Boost
 agents. Keep it focused on installing/configuring OoMyCache in an app, not package internals.
 
+## Production and adoption docs
+
+- `docs/implementation/production-runbook.md` — deploy/store/worker/file-store/rollback runbook.
+- `docs/implementation/adoption-checklist.md` — model/write-path audit and rollout gates.
+- `docs/implementation/store-selection.md` — database/file/Redis/Memcached trade-offs.
+- `scripts/benchmark-stores.ps1` / `.sh` — run from a host app with `config:clear` to compare stores.
+- `SECURITY.md` and `CONTRIBUTING.md` — reporting and contribution rules.
+
 ## Boundaries
 
 - Do not commit `composer.lock`, `vendor/`, `build/` or PHPUnit caches.
