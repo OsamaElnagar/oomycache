@@ -1,28 +1,57 @@
 # Release Notes
 
-## Unreleased
+## 0.1.0 - 2026-11-11
+
+First stable release of OoMyCache: transparent, correctness-first Eloquent query caching for
+Laravel 12/13, with an optional Filament 5 bridge.
 
 ### Added
 
-- **Phase 2 tenancy support:** `TenantResolver` contract, `TenantContext`, `NullTenantResolver`; tenant/panel/user segments are embedded in every cache key and resolved per query; unresolved tenancy fails closed with reason `tenant-unresolved`.
-- **Filament bridge prototype (app-level):** Filament-aware tenant resolver (panel segment + fail-closed tenancy), `/admin/query-cache` cache studio page (status, cacheable models, selective invalidate + clear actions), and an `ActionCalled` invalidator for attach/detach/associate/dissociate/reorder/import and bulk mass branches.
-- **Filament bridge extracted:** the bridge lives in the standalone `osamaelnagar/oomycache-filament` companion package (`packages/OoMyCacheFilament`) with `OomycachePlugin`, the studio page and the invalidation bridge.
-- **Stats counters:** opt-in cache-backed hit/miss/bypass/invalidation/clear counters exposed in `oomycache:status` and the Filament studio.
-- **`oomycache:bench`:** cold vs warm app-query/timing benchmark for any cacheable model with JSON output.
-- **Payload hardening:** optional gzip/deflate/zstd compression envelope, transparent chunking above `payload.chunking.chunk_bytes` (manifest + xxh128 hash, corruption/partial → miss), per-request decoded-payload memo (purged on invalidation), negative caching with `negative_ttl`, and `QueryCacheEngine::forgetOptions()` for runtime config changes.
-- **`oomycache:prune`:** expiry-guarded, keyset-ordered garbage collection for database cache stores (`--dry-run`, `--chunk`, `--max-seconds`); refuses non-database stores with typed hints.
-- **Redis driver validated:** real phpredis-backed Redis cache store test in the dogfood app.
-- Core Eloquent query cache engine: `HasQueryCache` trait returning caching Eloquent and base query builders.
-- Version-namespace invalidation keyed by connection + table (O(1) on all cache drivers, no tag requirement).
-- Model-event and mass-write invalidation with transaction read bypass and after-commit invalidation.
-- Filament paginator total caching via the base query builder (`getCountForPagination`).
-- Dependency tracking for eager loads, `withCount`/`withSum`/`withExists`, `has`/`whereHas`, joins and subqueries.
-- Arrays-JSON payload codec (Laravel 13 `cache.serializable_classes=false` safe) with model/relation rehydration.
-- Per-query API: `cacheFor`, `cacheForForever`, `dontCache`, `cacheKey`, `cacheIf`; per-model `queryCacheOptions()`.
-- Commands: `oomycache:status`, `oomycache:clear`, `oomycache:doctor`.
-- Publishable configuration with presets, safety guardrails, tenancy/Filament configuration scaffolding.
+- `HasQueryCache` trait and caching Eloquent/base query builders. Opted-in models cache reads
+  (`get`, `first`, `paginate`, aggregates, `pluck`/`value`, eager loads) without resource or
+  controller changes.
+- O(1) version-token invalidation keyed by connection + table. Model events, mass writes,
+  relation/pivot writes and transaction-aware after-commit invalidation work on array, file,
+  database, Redis and Memcached stores without tags.
+- Dependency-aware keys for eager loads, `withCount`/`withSum`/`withExists`, `has`/`whereHas`,
+  joins and subqueries.
+- Automatic invalidation for `belongsToMany`, `morphToMany` and `morphedByMany` pivot operations.
+- Raw report/dashboard caching via `Oomycache::rememberQuery()` and explicit
+  `Oomycache::flushTables()` invalidation.
+- Arrays-JSON payloads (Laravel 13 `serializable_classes=false` safe), optional compression,
+  chunking with integrity hashing, negative caching, and per-request payload memoization.
+- Tenancy-aware keys with fail-closed behavior; optional Filament panel/tenant resolver.
+- Per-query API: `cacheFor`, `cacheForForever`, `dontCache`, `cacheKey`, `cacheIf`; per-model
+  `queryCacheOptions()` and named presets.
+- Commands: `oomycache:status`, `oomycache:clear`, `oomycache:doctor`, `oomycache:bench`,
+  `oomycache:prune`.
+- `oomycache:status` counters: hits, misses, bypasses, empty-result bypasses, invalidations, clears.
+- Optional companion package `osamaelnagar/oomycache-filament`: Query Cache studio, configurable
+  navigation, tenant/panel-safe keys, deny-by-default purge Gate, audit hook and Filament
+  `ActionCalled` invalidation.
+
+### Correctness
+
+- Cache failures fall back to the database; invalidation failures are logged and surface loudly.
+- Reads inside transactions bypass the cache; writes invalidate after commit by default.
+- Paired lifecycle writes emit one audit/stats notification per logical chain
+  (update, soft delete, restore, force delete) while still bumping the version token.
+- `oomycache:doctor` warns about uncacheable declared dependencies; `oomycache:bench` separates
+  application queries from cache-store statements and resets memoization between samples.
 
 ### Quality
 
-- Pest test suite: 24 tests / 42 assertions; PHPStan level 7 clean; Pint clean; 100% type coverage.
-- Dogfooded in a Filament 5 ERP app: 4 resources, 4 relation managers, select-heavy forms, custom page/actions, 3 widgets, 3 plain-Livewire front-office pages, 20k+ seeded rows; warm Filament list pages execute zero ERP-table queries.
+- Pest suite covering the engine, stores, payload security/chunking, tenancy, pivots, raw queries,
+  lifecycle dedupe, bridge and commands; PHPStan, Pint and 100% type coverage in CI.
+- Real-driver CI lanes for Redis, Memcached, MySQL and PostgreSQL, plus the PHP/Laravel matrix.
+- Local EnvKit hardening: multi-process cron/queue/file/store validation, outage fail-open and
+  authenticated Filament load tests.
+
+### Known limits
+
+- Raw SQL writes, `saveQuietly()`/`withoutEvents()` and raw pivot-table writes require an explicit
+  `Oomycache::flush()` / `flushTables()`.
+- `rememberQuery()` entries are invalidated only by the tables the caller lists.
+- File-store deployments are per-host and need periodic cleanup of unreachable versioned keys;
+  database stores pay cache-table statements on warm reads.
+- A stable release does not remove the need to benchmark the deployment host and cache store.

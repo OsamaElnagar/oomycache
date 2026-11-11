@@ -18,20 +18,18 @@ optional, not required.
 ## Compatibility
 
 - PHP 8.3+, Laravel 12 or 13
-- Current releases are public **alpha** tags (`v0.1.0-alpha.*`). Install with an explicit alpha
-  constraint; a plain `composer require osamaelnagar/oomycache` will not select an alpha on a
-  default-stability project.
+- Stable releases are `v0.1.0`+; a plain `composer require osamaelnagar/oomycache` is sufficient.
 - Core has **no Filament or Livewire dependency**. The bridge package adds Filament integration.
 
 ## Install
 
 ```bash
 # core only (any Laravel app)
-composer require osamaelnagar/oomycache:^0.1.0-alpha.1
+composer require osamaelnagar/oomycache
 php artisan vendor:publish --tag=oomycache-config
 
 # optional: Filament 5 bridge (adds the studio page + tenant/invalidation integration)
-composer require osamaelnagar/oomycache-filament:^0.1.0-alpha.1
+composer require osamaelnagar/oomycache-filament
 ```
 
 For the bridge, register the plugin in the relevant Filament panel:

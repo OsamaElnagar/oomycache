@@ -21,8 +21,8 @@
   <a href="LICENSE.md"><img src="https://img.shields.io/badge/license-MIT-22d3a7?style=flat-square" alt="MIT license"></a>
 </p>
 
-> **Status:** public alpha (`v0.1.0-alpha.*`). Core engine, tenancy, payload hardening and the
-> optional Filament bridge are implemented and tested; see [`docs/implementation`](docs/implementation).
+> **Status:** stable `v0.1.0`. Core engine, tenancy, payload hardening and the optional Filament
+> bridge are implemented, tested and documented; see [`docs/implementation`](docs/implementation).
 
 OoMyCache makes repeated Eloquent reads disappear — transparently — with a correctness-first
 invalidation model that works in any Laravel application: APIs, queues, dashboards, back offices,
@@ -60,7 +60,7 @@ dependency**.
 ## Installation
 
 ```bash
-composer require osamaelnagar/oomycache:^0.1.0-alpha.1
+composer require osamaelnagar/oomycache
 php artisan vendor:publish --tag=oomycache-config
 ```
 
@@ -182,7 +182,7 @@ The Phase-2 bridge is a standalone companion package, [`osamaelnagar/oomycache-f
   (attach/detach/associate/dissociate/reorder/import and the bulk mass branches).
 
 ```bash
-composer require osamaelnagar/oomycache:^0.1.0-alpha.1 osamaelnagar/oomycache-filament:^0.1.0-alpha.1
+composer require osamaelnagar/oomycache osamaelnagar/oomycache-filament
 ```
 
 ```php
