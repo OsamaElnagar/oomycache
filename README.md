@@ -234,6 +234,8 @@ OOMYCACHE_TEST_DB=mysql DB_HOST=127.0.0.1 DB_DATABASE=oomycache_smoke DB_USERNAM
 In an application with `config:cache` enabled, `phpunit.xml` environment overrides are ignored; run
 `php artisan config:clear` before the test suite, then re-cache after it. Keep the suite cache-inert
 with `OOMYCACHE_ENABLED=false` / `OOMYCACHE_STORE=array` unless it is explicitly testing the cache.
+After changing `OOMYCACHE_*` values and rebuilding the config cache, restart the application's
+PHP-FPM/PHP-CGI workers; long-lived web workers can otherwise keep serving the previous config.
 
 The package was dogfooded in a real Filament 5 ERP app (4 resources, relation managers, select-heavy
 forms, custom page/actions, widgets, plain-Livewire front-office pages) with 3,000 products /
