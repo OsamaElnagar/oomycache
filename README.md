@@ -17,6 +17,7 @@
   <a href="https://packagist.org/packages/osamaelnagar/oomycache-filament"><img src="https://img.shields.io/badge/Filament-optional-6f7dff?style=flat-square" alt="Filament bridge optional"></a>
   <a href="https://github.com/OsamaElnagar/oomycache/stargazers"><img src="https://img.shields.io/github/stars/OsamaElnagar/oomycache?style=flat-square&color=ff9bd6" alt="GitHub stars"></a>
   <a href="https://github.com/OsamaElnagar/oomycache/actions/workflows/tests.yml"><img src="https://github.com/OsamaElnagar/oomycache/actions/workflows/tests.yml/badge.svg" alt="Tests"></a>
+  <a href="https://github.com/OsamaElnagar/oomycache/actions/workflows/driver-matrix.yml"><img src="https://github.com/OsamaElnagar/oomycache/actions/workflows/driver-matrix.yml/badge.svg" alt="Real driver matrix"></a>
   <a href="LICENSE.md"><img src="https://img.shields.io/badge/license-MIT-22d3a7?style=flat-square" alt="MIT license"></a>
 </p>
 

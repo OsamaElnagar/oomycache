@@ -3,11 +3,10 @@
 # Scope and expectations (see docs/implementation/driver-matrix.md):
 #   * Nightly + manual + path-filtered main pushes. This lane is NOT the PR gate;
 #     `.github/workflows/tests.yml` remains the per-PR matrix.
-#   * The package suite runs on Testbench's sqlite `:memory:` connection, so the
-#     external drivers are proven by an explicit connectivity probe against the
-#     service container followed by the full suite with the driver env present.
-#     The driver jobs are therefore smoke lanes: they prove the client extension
-#     and credentials work and that the suite stays green with that configuration.
+#   * The package suite runs on Testbench's sqlite `:memory:` connection. Each external-driver
+#     job probes the service container and then runs the matching real-driver Pest file
+#     (`RealCacheDriverTest` for Redis/Memcached, `DatabaseDriverTest` for MySQL/PostgreSQL)
+#     with the driver env present before the normal suite smoke lane.
 #   * This file assumes the package repository root. While the package still lives
 #     at packages/OoMyCache inside the dogfood monorepo, GitHub ignores it (only the
 #     app root .github/workflows runs); it becomes live once the package is split
@@ -138,6 +137,11 @@ jobs:
           echo "redis set/get/del OK".PHP_EOL;
           '
 
+      - name: Real Redis driver lane
+        env:
+          OOMYCACHE_TEST_DRIVER: redis
+        run: vendor/bin/pest tests/Feature/RealCacheDriverTest.php
+
       - name: Test suite
         run: composer test:unit
 
@@ -202,6 +206,11 @@ jobs:
           exit(1);
           '
 
+      - name: Real Memcached driver lane
+        env:
+          OOMYCACHE_TEST_DRIVER: memcached
+        run: vendor/bin/pest tests/Feature/RealCacheDriverTest.php
+
       - name: Test suite
         run: composer test:unit
 
@@ -262,6 +271,11 @@ jobs:
           echo "mysql: ".$pdo->query("SELECT VERSION()")->fetchColumn().PHP_EOL;
           '
 
+      - name: Real MySQL driver lane
+        env:
+          OOMYCACHE_TEST_DB: mysql
+        run: vendor/bin/pest tests/Feature/DatabaseDriverTest.php
+
       - name: Test suite
         run: composer test:unit
 
@@ -320,6 +334,11 @@ jobs:
           );
           echo "postgres: ".$pdo->query("SELECT version()")->fetchColumn().PHP_EOL;
           '
+
+      - name: Real PostgreSQL driver lane
+        env:
+          OOMYCACHE_TEST_DB: pgsql
+        run: vendor/bin/pest tests/Feature/DatabaseDriverTest.php
 
       - name: Test suite
         run: composer test:unit
