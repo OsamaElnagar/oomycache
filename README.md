@@ -166,6 +166,29 @@ public function queryCacheOptions(): array
 | `oomycache:bench {model}` | cold vs warm app-query counts, separate cache-store statement counts, and timings for a cacheable model (`--limit`, `--samples`, `--json`); isolated benchmark keys, memo reset between samples, no global cache clear unless `--clear` |
 | `oomycache:prune` | delete expired database-cache rows (keyset-ordered, expiry-guarded; `--dry-run`, `--chunk`, `--max-seconds`; schedule hourly) |
 
+## Production adoption
+
+Before enabling more than a pilot, read:
+
+- [`docs/implementation/production-runbook.md`](docs/implementation/production-runbook.md) — store choice,
+  deploy order, config-cache/test isolation, worker restarts, file-store maintenance, rollback.
+- [`docs/implementation/adoption-checklist.md`](docs/implementation/adoption-checklist.md) — model/write-path
+  audit, correctness tests, measurements and rollout gates.
+- [`docs/implementation/store-selection.md`](docs/implementation/store-selection.md) — database/file/Redis/
+  Memcached trade-offs, including no-Redis hosts.
+
+Benchmark the deployment host store with:
+
+```powershell
+php artisan config:clear
+pwsh vendor/osamaelnagar/oomycache/scripts/benchmark-stores.ps1 "App\Models\Product"
+```
+
+```bash
+php artisan config:clear
+vendor/osamaelnagar/oomycache/scripts/benchmark-stores.sh "App\\Models\\Product"
+```
+
 ## Filament compatibility
 
 Core has **no** Filament or Livewire dependency. The package works with Filament 5 / Livewire 4 today
@@ -263,9 +286,23 @@ maintenance conventions for agents working on OoMyCache itself.
 
 ## Documentation
 
+- [`docs/implementation/production-runbook.md`](docs/implementation/production-runbook.md) — production rollout
+- [`docs/implementation/adoption-checklist.md`](docs/implementation/adoption-checklist.md) — model adoption gates
+- [`docs/implementation/store-selection.md`](docs/implementation/store-selection.md) — store trade-offs
+- [`docs/implementation/security-review.md`](docs/implementation/security-review.md) — residual risks and controls
+- [`docs/implementation/config-reference.md`](docs/implementation/config-reference.md) — every config key
 - [`docs/README.md`](docs/README.md) — research & design dossier (competitor analysis + blueprint)
 - [`docs/plan/03-architecture.md`](docs/plan/03-architecture.md) — key composition, invalidation algebra, ADRs
 - [`docs/plan/05-qa-checklist.md`](docs/plan/05-qa-checklist.md) — release gates
+
+## Security
+
+See [`SECURITY.md`](SECURITY.md) for supported versions and private vulnerability reporting. Do not open
+public issues for security reports.
+
+## Contributing
+
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) for setup, tests, conventions and release rules.
 
 ## License
 

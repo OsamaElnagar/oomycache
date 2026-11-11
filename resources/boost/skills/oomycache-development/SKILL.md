@@ -205,6 +205,8 @@ Empty results are not cached unless `cache.negative=true`; they show up as `empt
 ## References
 
 - Package README: integrations and feature table
+- `docs/implementation/production-runbook.md`: deploy order, stores, worker restarts and rollback
+- `docs/implementation/adoption-checklist.md`: model/write-path audit and rollout gates
 - `docs/implementation/config-reference.md`: every key the code reads
 - `docs/implementation/operational-guardrails.md`: raw/quiet/pivot writes, forever rows, DoS
 - `docs/implementation/security-review.md`: residual risks and launch conditions
