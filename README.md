@@ -237,6 +237,12 @@ with `OOMYCACHE_ENABLED=false` / `OOMYCACHE_STORE=array` unless it is explicitly
 After changing `OOMYCACHE_*` values and rebuilding the config cache, restart the application's
 PHP-FPM/PHP-CGI workers; long-lived web workers can otherwise keep serving the previous config.
 
+Long-running processes that keep one Laravel application instance alive (queue workers, Octane,
+custom daemon loops) must call `app(\Oomycache\Oomycache\Cache\QueryCacheEngine::class)->resetRuntimeState()`
+at each request/job boundary. The package resets automatically on queued jobs and Octane request
+events; a custom `while` loop must reset it itself when it expects to observe writes from other
+processes.
+
 The package was dogfooded in a real Filament 5 ERP app (4 resources, relation managers, select-heavy
 forms, custom page/actions, widgets, plain-Livewire front-office pages) with 3,000 products /
 2,500 purchase orders / 5,000 invoices; warm Filament list pages execute **zero** ERP-table queries.

@@ -57,6 +57,14 @@ final class QueryCacheEngine
     /** @var array<string, mixed> */
     private array $requestMemo = [];
 
+    /**
+     * Last invalidation event per connection/table, used to suppress the
+     * duplicate event emitted by Eloquent's update-then-saved write path.
+     *
+     * @var array<string, array{at: float, reason: string}>
+     */
+    private array $lastInvalidationEvents = [];
+
     public function __construct(
         private readonly CacheManager $cache,
         private readonly ConfigRepository $config,
@@ -607,11 +615,38 @@ final class QueryCacheEngine
         $this->requestMemo = [];
 
         if ((bool) $this->config->get('oomycache.events.enabled', true)
-            && (bool) $this->config->get('oomycache.events.invalidations', true)) {
+            && (bool) $this->config->get('oomycache.events.invalidations', true)
+            && $this->shouldDispatchInvalidation($table, $connection, $reason)) {
             $this->dispatcher()->dispatch(new QueryCacheInvalidated($table, $connection, $reason));
         }
 
         return $token;
+    }
+
+    /**
+     * Eloquent's model update/delete path flushes once through the builder and
+     * again through the saved/deleted event. The token must be bumped both
+     * times (the builder write and the model event are separate moments), but
+     * the duplicate notification should not reach audit listeners/stats.
+     */
+    private function shouldDispatchInvalidation(string $table, ?string $connection, string $reason): bool
+    {
+        $key = ($connection ?? 'default').'|'.$table;
+        $now = microtime(true);
+        $previous = $this->lastInvalidationEvents[$key] ?? null;
+
+        $this->lastInvalidationEvents[$key] = ['at' => $now, 'reason' => $reason];
+
+        if ($previous === null || $now - $previous['at'] > 0.05) {
+            return true;
+        }
+
+        return ! in_array([$previous['reason'], $reason], [
+            ['update', 'saved'],
+            ['delete', 'deleted'],
+            ['forceDelete', 'forceDeleted'],
+            ['update', 'restored'],
+        ], true);
     }
 
     public function flushModel(string $modelClass, string $reason = 'write'): void
@@ -653,6 +688,7 @@ final class QueryCacheEngine
         $this->versionMemo = [];
         $this->optionsMemo = [];
         $this->globalToken = null;
+        $this->lastInvalidationEvents = [];
     }
 
     public function clear(): void

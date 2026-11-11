@@ -137,6 +137,10 @@ writes invalidate the entry automatically; otherwise flush explicitly.
   writes need an explicit `Oomycache::flush([...])` or `flushTables([...])`.
 - Reads inside a transaction bypass the cache; writes inside a transaction invalidate after commit
   (both defaults are configurable under `safety`).
+- Long-running processes (queue workers, Octane, custom daemon loops) must call
+  `app(\Oomycache\Oomycache\Cache\QueryCacheEngine::class)->resetRuntimeState()` at each
+  request/job boundary. The package does this automatically for queued jobs and Octane requests;
+  a custom loop must do it itself so it sees writes from other processes.
 - Never call `Cache::flush()` to invalidate OoMyCache. Use `oomycache:clear` / `Oomycache::clear()`.
 
 ## Commands

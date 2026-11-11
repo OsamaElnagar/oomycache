@@ -2,8 +2,10 @@
 
 declare(strict_types=1);
 
+use Illuminate\Support\Facades\Event;
 use Oomycache\Oomycache\Cache\QueryCacheEngine;
 use Oomycache\Oomycache\Contracts\VersionStore;
+use Oomycache\Oomycache\Events\QueryCacheInvalidated;
 use Workbench\App\Models\Category;
 use Workbench\App\Models\Product;
 
@@ -18,6 +20,28 @@ beforeEach(function (): void {
         'oomycache.stats.sample_rate' => 1.0,
         'oomycache.stats.ttl' => 3600,
     ]);
+});
+
+it('emits a single invalidation notification for a model update', function (): void {
+    Category::query()->create(['name' => 'Dedupe category', 'is_active' => true]);
+    $product = Product::query()->create(['sku' => 'DEDUPE-UPDATE', 'name' => 'Dedupe product', 'is_active' => true]);
+
+    Event::fake([QueryCacheInvalidated::class]);
+
+    $product->update(['name' => 'Dedupe renamed']);
+
+    Event::assertDispatchedTimes(QueryCacheInvalidated::class, 1);
+});
+
+it('emits a single invalidation notification for a model delete', function (): void {
+    Category::query()->create(['name' => 'Dedupe delete category', 'is_active' => true]);
+    $product = Product::query()->create(['sku' => 'DEDUPE-DELETE', 'name' => 'Dedupe delete product', 'is_active' => true]);
+
+    Event::fake([QueryCacheInvalidated::class]);
+
+    $product->delete();
+
+    Event::assertDispatchedTimes(QueryCacheInvalidated::class, 1);
 });
 
 it('records hit, miss and invalidation counters', function (): void {
