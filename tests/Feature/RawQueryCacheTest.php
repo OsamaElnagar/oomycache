@@ -68,3 +68,18 @@ it('does not cache empty raw results when negative caching is disabled', functio
 
     expect($calls)->toBe(2);
 });
+
+it('can cache an empty raw result with a per-call negative TTL', function (): void {
+    $calls = 0;
+
+    $callback = function () use (&$calls): array {
+        $calls++;
+
+        return [];
+    };
+
+    Oomycache::rememberQuery(['products'], 'raw:empty-negative', 60, $callback, null, 30);
+    Oomycache::rememberQuery(['products'], 'raw:empty-negative', 60, $callback, null, 30);
+
+    expect($calls)->toBe(1);
+});

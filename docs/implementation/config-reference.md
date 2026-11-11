@@ -23,8 +23,9 @@
 | `cache.pagination` | `true` | engine options | `paginate`/`simplePaginate` item queries |
 | `cache.single_records` | `true` | engine options | `find`/route-binding-shaped single reads |
 | `cache.value_and_pluck` | `true` | engine options | `value`/`pluck` |
-| `cache.negative` | `false` | engine options | cache empty/null results; off by default. When false, empty results are re-queried every time and counted as `empty_bypasses` in stats |
+| `cache.negative` | `false` | engine options | cache empty/null results; off by default. When false, empty results are re-queried every time and counted as `empty_bypasses` in stats. `rememberQuery()` also accepts a per-call `negativeTtl` argument to cache one raw empty result. |
 | `cache.negative_ttl` | `10` | engine | TTL for negative entries |
+| `cache.invalidation_dedupe_ms` | `100` | engine | window for deduping builder-write + model-event notifications in one logical write chain; raise for slow hooks/listeners, `0` disables the time window (lifecycle reasons still dedupe) |
 | `cache.search_terms` | `false` | engine | cache user-search-shaped queries (unsafe-ish; keep off) |
 | `cache.skip_query_patterns` | `[]` | engine | raw SQL substrings never cached |
 | `cache.skip_models` | `[]` | engine | model classes never cached even with the trait |
@@ -58,7 +59,7 @@
 | --- | --- | --- |
 | `tenant.resolver` | `null` | class implementing `Contracts\TenantResolver`; validated by doctor |
 | `tenant.include_user` | `false` | bridge resolver adds a hashed user segment |
-| `events.enabled` / `events.hits` / `events.misses` / `events.invalidations` | `true` | event emission switches |
+| `events.enabled` / `events.hits` / `events.misses` / `events.invalidations` | `true` | event emission switches; invalidation/clear events are also suppressed while the package is disabled |
 | `stats.enabled` | `false` | cache-backed hit/miss/bypass/invalidation/clear counters; `empty_bypasses` tracks empty results skipped because negative caching is off |
 | `stats.store` | `null` | store for counters (defaults to `oomycache.store`, then Laravel's default cache store) |
 | `stats.ttl` | `3600` | counter window |

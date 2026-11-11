@@ -50,9 +50,9 @@ final class Oomycache
      * @param  Closure(): TReturn  $callback
      * @return TReturn
      */
-    public function rememberQuery(array $tables, string $key, int $ttl, Closure $callback, ?string $connection = null): mixed
+    public function rememberQuery(array $tables, string $key, int $ttl, Closure $callback, ?string $connection = null, ?int $negativeTtl = null): mixed
     {
-        return $this->engine->rememberRaw($tables, $key, $ttl, $callback, $connection);
+        return $this->engine->rememberRaw($tables, $key, $ttl, $callback, $connection, $negativeTtl);
     }
 
     /**

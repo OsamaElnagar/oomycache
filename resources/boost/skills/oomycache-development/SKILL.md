@@ -112,9 +112,14 @@ writes invalidate the entry automatically; otherwise flush explicitly.
 - `belongsToMany`, `morphToMany` and the `morphedByMany` inverse on cacheable models are wrapped:
   `attach`/`detach`/`sync`/`toggle`/pivot updates flush both table namespaces (config
   `cache.pivot_invalidation`, default true).
-- Raw pivot-table writes, `saveQuietly()`/`withoutEvents()` and raw
-  `DB::table()->update()/delete()/insert()` still need an explicit `Oomycache::flush([...])` or
-  `flushTables([...])`.
+- Raw/quiet writes need explicit `flushTables()`; `rememberQuery()` caches empty raw results only with
+  `cache.negative=true` or a per-call `negativeTtl` argument.
+- Bypass reason precedence: term-dependent search is reported as `search-query` *before*
+  `skip_query_patterns` can report `excluded-pattern`. Both are bypasses; do not use the reason alone
+  to decide whether a pattern was checked.
+- `oomycache:bench --all` discovers every cacheable model in `app/Models`; use it for host-wide sweeps.
+- For immutable models (writes rejected by the model), test invalidation through an allowed builder
+  write or document the immutable-safe path; there is no `assertInvalidated()` helper.
 
 ## Store choice (including no-Redis hosts)
 

@@ -1,5 +1,26 @@
 # Release Notes
 
+## 0.1.2 - 2026-11-11
+
+### Fixed
+
+- `QueryCacheInvalidated` / `QueryCacheCleared` events are no longer dispatched while
+  `OOMYCACHE_ENABLED=false`; version tokens still bump so re-enabling the cache cannot serve stale
+  entries.
+- A listener that writes another cached model from an invalidation event no longer recursively
+  dispatches invalidation events (the nested write still bumps its table token).
+- `cache.invalidation_dedupe_ms` makes the builder-write/model-event dedupe window configurable for
+  slow hooks/listeners; default remains 100 ms.
+- `rememberQuery()` accepts a per-call `negativeTtl` so an intentionally empty raw result can be
+  cached without enabling global negative caching.
+- `oomycache:bench --all` discovers and benchmarks every cacheable model, including Testbench/workbench
+  applications; the namespace is no longer hardcoded to `App\Models`.
+
+### Documentation
+
+- Bypass-reason precedence (`search-query` before `excluded-pattern`), immutable-model invalidation
+  testing, disabled-event behavior and the new config key.
+
 ## 0.1.1 - 2026-11-11
 
 ### Added

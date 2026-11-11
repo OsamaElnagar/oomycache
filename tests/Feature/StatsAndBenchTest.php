@@ -136,3 +136,16 @@ it('returns JSON from the bench command', function (): void {
         '--json' => true,
     ])->assertSuccessful();
 });
+
+it('benchmarks every discovered cacheable model with --all', function (): void {
+    Category::query()->create(['name' => 'Bench all category', 'is_active' => true]);
+    Product::query()->create(['sku' => 'BENCH-ALL', 'name' => 'Bench all product', 'is_active' => true]);
+
+    $this->artisan('oomycache:bench', [
+        '--all' => true,
+        '--limit' => 1,
+        '--samples' => 1,
+    ])
+        ->expectsOutputToContain('cacheable models')
+        ->assertSuccessful();
+});

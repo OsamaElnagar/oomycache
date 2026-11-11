@@ -13,47 +13,112 @@ use Oomycache\Oomycache\Cache\QueryCacheEngine;
 class BenchCommand extends Command
 {
     protected $signature = 'oomycache:bench
-                            {model : Fully-qualified cacheable model class}
+                            {model? : Fully-qualified cacheable model class}
+                            {--all : Benchmark every discovered cacheable model}
                             {--limit=100 : Rows fetched per query}
                             {--samples=5 : Warm samples}
                             {--clear : Bump the global cache token first (destructive; normally not needed)}
                             {--json : Output JSON instead of a table}';
 
-    protected $description = 'Benchmark cold vs warm Eloquent read queries for a cacheable model.';
+    protected $description = 'Benchmark cold vs warm Eloquent read queries for cacheable model(s).';
 
     public function handle(QueryCacheEngine $engine): int
     {
-        /** @var string $model */
-        $model = $this->argument('model');
-
-        if (! class_exists($model)) {
-            $this->components->error("Model [{$model}] does not exist.");
-
-            return self::FAILURE;
-        }
-
-        if (! $engine->isCacheableModel($model)) {
-            $this->components->error("Model [{$model}] is not cacheable (missing HasQueryCache).");
-
-            return self::FAILURE;
-        }
-
+        $all = (bool) $this->option('all');
+        $clear = (bool) $this->option('clear');
         $limit = max(1, (int) $this->option('limit'));
         $samples = max(1, (int) $this->option('samples'));
-        $clear = (bool) $this->option('clear');
+
+        if ($all) {
+            $models = $engine->cacheableModels();
+
+            if ($models === []) {
+                $this->components->error('No cacheable models were discovered in app/Models.');
+
+                return self::FAILURE;
+            }
+        } else {
+            $modelArgument = $this->argument('model');
+            $model = is_string($modelArgument) ? $modelArgument : '';
+
+            if ($model === '' || ! class_exists($model)) {
+                $this->components->error("Model [{$model}] does not exist. Pass a model or --all.");
+
+                return self::FAILURE;
+            }
+
+            if (! $engine->isCacheableModel($model)) {
+                $this->components->error("Model [{$model}] is not cacheable (missing HasQueryCache).");
+
+                return self::FAILURE;
+            }
+
+            $models = [$model];
+        }
 
         if ($clear) {
             $engine->clear();
         }
 
-        // Isolate the benchmark in its own key namespace. The first read is a
-        // genuine cold miss, warm samples hit the same keys, and no existing
-        // application cache entries are touched.
+        $results = [];
+
+        foreach ($models as $model) {
+            $results[] = $this->benchmarkModel($engine, $model, $limit, $samples, $clear);
+        }
+
+        if ((bool) $this->option('json')) {
+            $payload = $all ? $results : $results[0];
+            $this->line((string) json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+
+            return self::SUCCESS;
+        }
+
+        if ($all) {
+            $this->components->info('OoMyCache bench: '.count($results).' cacheable models');
+
+            $this->table(
+                ['Model', 'Warm app', 'Warm store', 'Warm total', 'Warm ms'],
+                array_map(static fn (array $result): array => [
+                    $result['model'],
+                    $result['warm_avg_app_queries'],
+                    $result['warm_avg_store_queries'],
+                    $result['warm_avg_total_queries'],
+                    $result['warm_avg_ms'],
+                ], $results),
+            );
+
+            return self::SUCCESS;
+        }
+
+        $result = $results[0];
+        $this->components->info('OoMyCache bench: '.$result['model']);
+
+        if (! $clear) {
+            $this->components->warn('Existing application cache was not cleared; only benchmark-isolated keys were used. Pass --clear to reset the global token (destructive).');
+        }
+
+        $this->table(
+            ['Run', 'App queries', 'Store queries', 'Total', 'Time (ms)'],
+            [
+                ['cold', $result['cold']['app_queries'], $result['cold']['store_queries'], $result['cold']['queries'], $result['cold']['ms']],
+                ['warm avg ('.$samples.' samples)', $result['warm_avg_app_queries'], $result['warm_avg_store_queries'], $result['warm_avg_total_queries'], $result['warm_avg_ms']],
+            ],
+        );
+
+        if ($result['warm_avg_store_queries'] > 0) {
+            $this->components->warn('Warm reads hit the cache-store table too; "0 app queries" is not "0 SQL statements" on the database store.');
+        }
+
+        return self::SUCCESS;
+    }
+
+    /**
+     * @return array{model: string, limit: int, cache_cleared: bool, memo_reset_per_sample: bool, cold: array<string, mixed>, warm_samples: int, warm_avg_ms: float, warm_avg_app_queries: float, warm_avg_store_queries: float, warm_avg_total_queries: float, warm: list<array<string, mixed>>}
+     */
+    private function benchmarkModel(QueryCacheEngine $engine, string $model, int $limit, int $samples, bool $clear): array
+    {
         $suffix = 'bench:'.bin2hex(random_bytes(8));
 
-        // Reset per-process memoization between samples: a warm sample must
-        // exercise the cache store like a new request would, not just the
-        // in-process request memo.
         $engine->resetRuntimeState();
         $cold = $this->measure($model, $limit, $suffix);
         $warm = [];
@@ -68,7 +133,7 @@ class BenchCommand extends Command
         $warmTotalQueries = array_sum(array_column($warm, 'queries')) / count($warm);
         $warmMs = array_sum(array_column($warm, 'ms')) / count($warm);
 
-        $result = [
+        return [
             'model' => $model,
             'limit' => $limit,
             'cache_cleared' => $clear,
@@ -81,32 +146,6 @@ class BenchCommand extends Command
             'warm_avg_total_queries' => round($warmTotalQueries, 2),
             'warm' => $warm,
         ];
-
-        if ((bool) $this->option('json')) {
-            $this->line((string) json_encode($result, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
-
-            return self::SUCCESS;
-        }
-
-        $this->components->info('OoMyCache bench: '.$model);
-
-        if (! $clear) {
-            $this->components->warn('Existing application cache was not cleared; only benchmark-isolated keys were used. Pass --clear to reset the global token (destructive).');
-        }
-
-        $this->table(
-            ['Run', 'App queries', 'Store queries', 'Total', 'Time (ms)'],
-            [
-                ['cold', $cold['app_queries'], $cold['store_queries'], $cold['queries'], $cold['ms']],
-                ['warm avg ('.$samples.' samples)', round($warmQueries, 2), round($warmStoreQueries, 2), round($warmTotalQueries, 2), round($warmMs, 3)],
-            ],
-        );
-
-        if ($warmStoreQueries > 0) {
-            $this->components->warn('Warm reads hit the cache-store table too; "0 app queries" is not "0 SQL statements" on the database store.');
-        }
-
-        return self::SUCCESS;
     }
 
     /**

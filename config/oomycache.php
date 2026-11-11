@@ -75,6 +75,10 @@ return [
         'search_terms' => false,
         'skip_query_patterns' => [],
         'skip_models' => [],
+        // Eloquent builder writes and model events for one logical write chain
+        // are deduped within this window. Raise it for slow listeners/hooks;
+        // 0 disables the time window (lifecycle-reason dedupe still applies).
+        'invalidation_dedupe_ms' => (int) env('OOMYCACHE_INVALIDATION_DEDUPE_MS', 100),
 
         // Invalidate both table namespaces when a cacheable model's
         // belongsToMany/morphToMany pivot is attached/detached/synced. Pivot

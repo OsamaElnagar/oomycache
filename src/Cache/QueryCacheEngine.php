@@ -67,6 +67,13 @@ final class QueryCacheEngine
      */
     private array $lastInvalidationEvents = [];
 
+    /**
+     * True while a QueryCacheInvalidated listener is running. A listener that
+     * writes another cached model must not recursively dispatch a new
+     * invalidation event; its version token still bumps.
+     */
+    private bool $dispatchingInvalidation = false;
+
     public function __construct(
         private readonly CacheManager $cache,
         private readonly ConfigRepository $config,
@@ -348,7 +355,7 @@ final class QueryCacheEngine
      * @param  callable(): TReturn  $execute
      * @return TReturn
      */
-    public function rememberRaw(array $tables, string $key, int $ttl, callable $execute, ?string $connection = null): mixed
+    public function rememberRaw(array $tables, string $key, int $ttl, callable $execute, ?string $connection = null, ?int $negativeTtl = null): mixed
     {
         $tables = array_values(array_unique(array_filter(
             array_map(static fn (string $table): string => trim($table), $tables),
@@ -421,7 +428,14 @@ final class QueryCacheEngine
         $this->dispatchRawMissed($cacheKey, $corrupt ? 'corrupt-payload' : 'miss');
         $value = $execute();
 
-        if (! (bool) $this->config->get('oomycache.cache.negative', false) && $this->isEmptyResult($value)) {
+        $empty = $this->isEmptyResult($value);
+        $effectiveNegativeTtl = $empty
+            ? ($negativeTtl ?? ((bool) $this->config->get('oomycache.cache.negative', false)
+                ? max(1, (int) $this->config->get('oomycache.cache.negative_ttl', 10))
+                : null))
+            : null;
+
+        if ($empty && ($effectiveNegativeTtl === null || $effectiveNegativeTtl < 1)) {
             $this->dispatchRawBypassed('negative-disabled');
 
             return $value;
@@ -439,8 +453,8 @@ final class QueryCacheEngine
             }
 
             $encoded = $this->compressor->compress($encoded);
-            $entryTtl = $this->isEmptyResult($value)
-                ? max(1, (int) $this->config->get('oomycache.cache.negative_ttl', 10))
+            $entryTtl = $empty
+                ? max(1, (int) $effectiveNegativeTtl)
                 : $this->resolveRawTtl($ttl);
 
             if ($chunking && $this->chunks->exceedsTotalBudget(strlen($encoded))) {
@@ -616,10 +630,18 @@ final class QueryCacheEngine
 
         $this->requestMemo = [];
 
-        if ((bool) $this->config->get('oomycache.events.enabled', true)
+        if ($this->enabled()
+            && ! $this->dispatchingInvalidation
+            && (bool) $this->config->get('oomycache.events.enabled', true)
             && (bool) $this->config->get('oomycache.events.invalidations', true)
             && $this->shouldDispatchInvalidation($table, $connection, $reason)) {
-            $this->dispatcher()->dispatch(new QueryCacheInvalidated($table, $connection, $reason));
+            $this->dispatchingInvalidation = true;
+
+            try {
+                $this->dispatcher()->dispatch(new QueryCacheInvalidated($table, $connection, $reason));
+            } finally {
+                $this->dispatchingInvalidation = false;
+            }
         }
 
         return $token;
@@ -635,9 +657,11 @@ final class QueryCacheEngine
     {
         $key = ($connection ?? 'default').'|'.$table;
         $now = microtime(true);
+        $windowMs = max(0, (int) $this->config->get('oomycache.cache.invalidation_dedupe_ms', 100));
+        $window = $windowMs / 1000;
         $previous = $this->lastInvalidationEvents[$key] ?? null;
 
-        if ($previous === null || $now - $previous['at'] > 0.1) {
+        if ($previous === null || $now - $previous['at'] > $window) {
             $this->lastInvalidationEvents[$key] = [
                 'at' => $now,
                 'dispatched' => $reason,
@@ -721,7 +745,8 @@ final class QueryCacheEngine
         $this->versionMemo = [];
         $this->requestMemo = [];
 
-        if ((bool) $this->config->get('oomycache.events.enabled', true)
+        if ($this->enabled()
+            && (bool) $this->config->get('oomycache.events.enabled', true)
             && (bool) $this->config->get('oomycache.events.invalidations', true)) {
             $this->dispatcher()->dispatch(new QueryCacheCleared);
         }
@@ -798,25 +823,53 @@ final class QueryCacheEngine
      */
     public function cacheableModels(): array
     {
-        $path = function_exists('app_path') ? app_path('Models') : null;
+        $sources = [];
 
-        if ($path === null || ! is_dir($path)) {
-            return [];
+        $appModels = function_exists('app_path') ? app_path('Models') : null;
+
+        if ($appModels !== null && is_dir($appModels)) {
+            $sources[] = [$appModels, rtrim(app()->getNamespace(), '\\').'\\Models\\'];
+        }
+
+        // Testbench/workbench applications keep models outside the Laravel app skeleton.
+        $workbenchCandidates = [];
+
+        if (function_exists('workbench_path')) {
+            $workbenchCandidates[] = workbench_path('app/Models');
+        }
+
+        if (function_exists('base_path')) {
+            $workbenchCandidates[] = base_path('workbench/app/Models');
+        }
+
+        // Package test suite: Testbench's base path is its own skeleton, while
+        // the workbench models live beside this package.
+        $workbenchCandidates[] = dirname(__DIR__, 2).DIRECTORY_SEPARATOR.'workbench'.DIRECTORY_SEPARATOR.'app'.DIRECTORY_SEPARATOR.'Models';
+
+        foreach ($workbenchCandidates as $workbenchModels) {
+            if (is_string($workbenchModels) && is_dir($workbenchModels)) {
+                $sources[] = [$workbenchModels, 'Workbench\\App\\Models\\'];
+
+                break;
+            }
         }
 
         $models = [];
 
-        /** @var iterable<SplFileInfo> $files */
-        $files = Finder::create()->files()->in($path)->name('*.php');
+        foreach ($sources as [$path, $namespace]) {
+            /** @var iterable<SplFileInfo> $files */
+            $files = Finder::create()->files()->in($path)->name('*.php');
 
-        foreach ($files as $file) {
-            $class = 'App\\Models\\'.str_replace(['/', '\\'], '\\', substr($file->getRelativePathname(), 0, -4));
+            foreach ($files as $file) {
+                $class = $namespace.str_replace(['/', '\\'], '\\', substr($file->getRelativePathname(), 0, -4));
 
-            if ($this->isCacheableModel($class)) {
-                $models[] = $class;
+                if ($this->isCacheableModel($class)) {
+                    $models[] = $class;
+                }
             }
         }
 
+        $models = array_values(array_unique($models));
         sort($models);
 
         return $models;

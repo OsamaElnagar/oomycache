@@ -14,7 +14,8 @@ fire those events** and therefore keep cached reads until TTL expiry (or forever
 | Quiet model writes | `$model->saveQuietly()`, `Model::withoutEvents(...)` | call `Oomycache::flush([$model::class])` after the write |
 | Raw query-builder writes | `DB::table('products')->update(...)`, `DB::statement(...)` | flush the affected model class(es) |
 | Non-Filament `belongsToMany` / `morphToMany` pivot writes on cacheable models | `$product->suppliers()->attach($id)`; `$product->tags()->attach($id)` | covered automatically by the caching relations: both table namespaces flush after attach/detach/sync/toggle |
-| Raw pivot-table / raw SQL writes | `DB::table('pivot')->insert()`; raw `DB::table()->update()/delete()/insert()` | flush explicitly (`Oomycache::flush([...])` / `flushTables([...])`) |
+| Invalidation event listener writes another cached model | audit listener that writes `audit_logs` | version tokens bump for the nested write, but nested invalidation events are suppressed for the duration of the listener; keep audit tables out of the cached model set where practical |
+| Raw/quiet writes and hand-written pivot tables | `DB::table('pivot')->insert()`; `saveQuietly()` | flush explicitly (`Oomycache::flush([...])` / `flushTables([...])`) |
 | Filament pivot/action writes | attach/detach/reorder/import | covered by the bridge `ActionCalled` listener; custom action names must be added to the invalidator or flushed manually |
 
 `Oomycache::flush([...])` bumps the version token — O(1), no key scans. Background jobs that write via
