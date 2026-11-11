@@ -46,6 +46,14 @@ abstract class TestCase extends Orchestra
     {
         parent::setUp();
 
+        // The real database-driver lane defines its own schema on the external
+        // connection; running the workbench migrations here would require a
+        // migrations table on that external database (and fails on a clean CI
+        // service). The normal package suite uses the sqlite workbench schema.
+        if (getenv('OOMYCACHE_TEST_DB')) {
+            return;
+        }
+
         $this->artisan('migrate')->run();
     }
 }
