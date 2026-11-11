@@ -39,6 +39,10 @@ abstract class TestCase extends Orchestra
 
     protected function defineDatabaseMigrations(): void
     {
+        if (getenv('OOMYCACHE_TEST_DB')) {
+            return;
+        }
+
         $this->loadMigrationsFrom(__DIR__.'/../workbench/database/migrations');
     }
 
