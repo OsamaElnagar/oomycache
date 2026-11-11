@@ -10,6 +10,7 @@ use Oomycache\Oomycache\Builder\QueryCacheBuilder;
 use Oomycache\Oomycache\Builder\QueryCacheQueryBuilder;
 use Oomycache\Oomycache\Cache\QueryCacheEngine;
 use Oomycache\Oomycache\Relations\CachingBelongsToMany;
+use Oomycache\Oomycache\Relations\CachingMorphToMany;
 
 /**
  * Opt-in trait: make a model's Eloquent reads cacheable.
@@ -73,6 +74,36 @@ trait HasQueryCache
             $parentKey,
             $relatedKey,
             $relationName,
+        );
+    }
+
+    /**
+     * Wrap polymorphic many-to-many relations so morph pivot writes invalidate
+     * both table namespaces as well.
+     */
+    protected function newMorphToMany(
+        Builder $query,
+        Model $parent,
+        $name,
+        $table,
+        $foreignPivotKey,
+        $relatedPivotKey,
+        $parentKey,
+        $relatedKey,
+        $relationName = null,
+        $inverse = false,
+    ): CachingMorphToMany {
+        return new CachingMorphToMany(
+            $query,
+            $parent,
+            $name,
+            $table,
+            $foreignPivotKey,
+            $relatedPivotKey,
+            $parentKey,
+            $relatedKey,
+            $relationName,
+            $inverse,
         );
     }
 

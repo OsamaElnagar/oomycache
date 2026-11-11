@@ -13,8 +13,9 @@
 
 ## Package changes produced by this lab
 
-- `CachingBelongsToMany`: cacheable models now invalidate both sides on
-  `attach`/`detach`/`sync`/`toggle`/pivot updates; `cache.pivot_invalidation` (default true).
+- `CachingBelongsToMany` and `CachingMorphToMany`: cacheable models invalidate both sides on
+  `attach`/`detach`/`sync`/`toggle`/pivot updates, including `morphToMany` and `morphedByMany`;
+  `cache.pivot_invalidation` (default true).
 - `Oomycache::rememberQuery()` / `flushTables()`: explicit raw-query caching for `DB::table()`
   reports with table dependency versioning.
 - `oomycache:bench`: isolated keys, memo reset per sample, `--clear` opt-in, separate
@@ -79,7 +80,8 @@ required a PHP-FPM restart.
    package does it for queued jobs/Octane request events.
 5. `rememberQuery()` invalidation is explicit: `flushTables()` must be called for tables written
    outside cacheable Eloquent models.
-6. `morphToMany`/raw pivot writes still need explicit flushes; only `belongsToMany` is wrapped.
+6. Raw pivot-table writes need explicit flushes; `belongsToMany`, `morphToMany` and `morphedByMany`
+   are wrapped automatically.
 
 ## Local lab artifacts
 

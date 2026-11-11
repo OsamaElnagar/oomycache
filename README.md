@@ -107,9 +107,9 @@ Oomycache::clear();
 ```
 
 Many-to-many pivots are covered automatically for cacheable models: the package wraps
-`belongsToMany` and flushes both table namespaces after `attach`, `detach`, `sync`, `toggle` and
-pivot updates (disable with `OOMYCACHE_PIVOT_INVALIDATION=false`). `morphToMany` and raw pivot-table
-writes still need an explicit flush.
+`belongsToMany`, `morphToMany` and the `morphedByMany` inverse, and flushes both table namespaces
+after `attach`, `detach`, `sync`, `toggle` and pivot updates (disable with
+`OOMYCACHE_PIVOT_INVALIDATION=false`). Raw pivot-table writes still need an explicit flush.
 
 ### Caching raw report/dashboard queries
 
@@ -208,8 +208,8 @@ See [`docs/implementation/phase-2-progress.md`](docs/implementation/phase-2-prog
 
 - **Opt-in per model.** No trait, no caching.
 - **Versioned invalidation.** A write bumps the table's version token; all cache keys embedding it
-  become unreachable. No tags required on any driver. Cacheable models' `belongsToMany` pivot
-  operations flush both sides automatically.
+  become unreachable. No tags required on any driver. Cacheable models' `belongsToMany`, `morphToMany`
+  and `morphedByMany` pivot operations flush both sides automatically.
 - **One notification per logical write chain.** Builder flushes and Eloquent lifecycle events
   (update, soft delete, restore, force delete) bump the token as needed, but audit/stats receive one
   invalidation notification for the chain.

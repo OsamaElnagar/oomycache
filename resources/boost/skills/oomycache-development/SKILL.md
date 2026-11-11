@@ -111,9 +111,10 @@ writes invalidate the entry automatically; otherwise flush explicitly.
 
 ## Pivots and raw writes
 
-- `belongsToMany` on cacheable models is wrapped: `attach`/`detach`/`sync`/`toggle`/pivot updates flush
-  both table namespaces (config `cache.pivot_invalidation`, default true).
-- `morphToMany`, raw pivot-table writes, `saveQuietly()`/`withoutEvents()` and raw
+- `belongsToMany`, `morphToMany` and the `morphedByMany` inverse on cacheable models are wrapped:
+  `attach`/`detach`/`sync`/`toggle`/pivot updates flush both table namespaces (config
+  `cache.pivot_invalidation`, default true).
+- Raw pivot-table writes, `saveQuietly()`/`withoutEvents()` and raw
   `DB::table()->update()/delete()/insert()` still need an explicit `Oomycache::flush([...])` or
   `flushTables([...])`.
 

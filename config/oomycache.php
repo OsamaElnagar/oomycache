@@ -77,8 +77,8 @@ return [
         'skip_models' => [],
 
         // Invalidate both table namespaces when a cacheable model's
-        // belongsToMany pivot is attached/detached/synced. Pivot writes do not
-        // fire Eloquent model events; this closes that invalidation hole.
+        // belongsToMany/morphToMany pivot is attached/detached/synced. Pivot
+        // writes do not fire Eloquent model events; this closes that hole.
         'pivot_invalidation' => true,
     ],
 
