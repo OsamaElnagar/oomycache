@@ -80,9 +80,11 @@ This removes the cache-table SELECTs that a database-backed query cache adds to 
 stats are enabled, set `OOMYCACHE_STATS_STORE=file` too (it defaults to `OOMYCACHE_STORE` in the
 current release). File cache is per-server and not shared across load-balanced nodes; benchmark it on
 the deployment host before enabling model traits, using the `app_queries`/`store_queries` split from
-`oomycache:bench`. Redis/Memcached remain the right choice for multi-node deployments; `array` is for
-tests only. See [`docs/implementation/store-selection.md`](docs/implementation/store-selection.md) for
-the full trade-off table, including Hostinger-style shared hosting.
+`oomycache:bench`. Because versioned invalidation leaves old payload files behind, schedule a periodic
+`php artisan cache:clear file` when the `file` store is dedicated to OoMyCache. Redis/Memcached remain
+the right choice for multi-node deployments; `array` is for tests only. See
+[`docs/implementation/store-selection.md`](docs/implementation/store-selection.md) for the full
+trade-off table, including Hostinger-style shared hosting.
 
 ## Usage
 
@@ -221,6 +223,12 @@ See [`docs/implementation/phase-2-progress.md`](docs/implementation/phase-2-prog
 
 ```bash
 composer test        # pint + phpstan + 100% type coverage + Pest
+
+# local real-driver lanes (services must be running)
+OOMYCACHE_TEST_DRIVER=redis     vendor/bin/pest tests/Feature/RealCacheDriverTest.php
+OOMYCACHE_TEST_DRIVER=memcached vendor/bin/pest tests/Feature/RealCacheDriverTest.php
+OOMYCACHE_TEST_DB=mysql DB_HOST=127.0.0.1 DB_DATABASE=oomycache_smoke DB_USERNAME=root \
+  vendor/bin/pest tests/Feature/DatabaseDriverTest.php
 ```
 
 The package was dogfooded in a real Filament 5 ERP app (4 resources, relation managers, select-heavy
