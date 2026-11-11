@@ -231,6 +231,10 @@ OOMYCACHE_TEST_DB=mysql DB_HOST=127.0.0.1 DB_DATABASE=oomycache_smoke DB_USERNAM
   vendor/bin/pest tests/Feature/DatabaseDriverTest.php
 ```
 
+In an application with `config:cache` enabled, `phpunit.xml` environment overrides are ignored; run
+`php artisan config:clear` before the test suite, then re-cache after it. Keep the suite cache-inert
+with `OOMYCACHE_ENABLED=false` / `OOMYCACHE_STORE=array` unless it is explicitly testing the cache.
+
 The package was dogfooded in a real Filament 5 ERP app (4 resources, relation managers, select-heavy
 forms, custom page/actions, widgets, plain-Livewire front-office pages) with 3,000 products /
 2,500 purchase orders / 5,000 invoices; warm Filament list pages execute **zero** ERP-table queries.
