@@ -21,8 +21,8 @@
   <a href="LICENSE.md"><img src="https://img.shields.io/badge/license-MIT-22d3a7?style=flat-square" alt="MIT license"></a>
 </p>
 
-> **Status:** stable `v0.1.0`. Core engine, tenancy, payload hardening and the optional Filament
-> bridge are implemented, tested and documented; see [`docs/implementation`](docs/implementation).
+> **Status:** stable release, tested on PHP 8.3–8.5 and Laravel 12–13, with real cache-store and
+> database-driver CI lanes.
 
 OoMyCache makes repeated Eloquent reads disappear — transparently — with a correctness-first
 invalidation model that works in any Laravel application: APIs, queues, dashboards, back offices,
@@ -41,6 +41,23 @@ That's it. Every plain Eloquent query on `Product` now goes through the caching 
 changes, no base-class changes, no fork. Filament resources, tables, widgets and relation managers get
 the same benefit when you install the optional bridge — the core package itself has **zero Filament
 dependency**.
+
+## Measured impact
+
+**58% fewer SQL statements · 52% less database time · 99.8% warm hit rate**  
+Across 1,040 real operations in a production-like 62-model Laravel/Filament ERP, with the same app code
+and a warm file-store cache. Read-heavy list/detail workloads saw **69% fewer SQL statements, 75% less
+DB time and 68% faster wall time**.
+
+| Surface | SQL before | SQL after | Reduction |
+| --- | ---: | ---: | ---: |
+| Audit-log paging (200 operations) | 400 | **0** | **100%** |
+| Journal entries + eager lines (100 operations) | 300 | **0** | **100%** |
+| Heavy Filament page loads (40 loads) | 791 | **184** | **77%** |
+| All 1,040 measured operations | 4,291 | **1,784** | **58%** |
+
+Benchmarks depend on the store, host, dataset and query shape. The [benchmark report](docs/implementation/benchmark-report.md)
+documents the method, per-workload results and limitations.
 
 ## Why another model cache?
 
@@ -195,7 +212,7 @@ Core has **no** Filament or Livewire dependency. The package works with Filament
 through the two builder subclasses, and the compatibility contract (tenants, pagination COUNT,
 invalidation matrix, bridge UX) is documented in [`docs/plan/04-filament-compatibility.md`](docs/plan/04-filament-compatibility.md).
 
-The Phase-2 bridge is a standalone companion package, [`osamaelnagar/oomycache-filament`](https://github.com/osamaelnagar/oomycache-filament) (`packages/OoMyCacheFilament`), which adds:
+The bridge is a standalone companion package, [`osamaelnagar/oomycache-filament`](https://github.com/osamaelnagar/oomycache-filament), which adds:
 
 - a Filament-aware **tenant resolver**: the current panel is part of every cache key, and tenancy
   active without a resolved tenant **fails closed** (query runs uncached);
@@ -216,16 +233,6 @@ return $panel
     // ...
     ->plugin(OomycachePlugin::make());
 ```
-
-## Verified in the dogfood app
-
-- Filament 5 resources/tables/widgets/custom page warm renders: **0 ERP-table queries** (includes paginator totals).
-- Filament relation-manager `AttachAction`/`DetachAction` on a belongsToMany relation invalidate cached aggregates (real E2E tests).
-- Plain Livewire 4 front-office pages warm renders: 0 ERP-table queries.
-- Database, file, **real Redis** and **real Memcached** cache stores validated; Laravel 13 `serializable_classes=false` payload safety proven.
-- `oomycache:bench` on the seeded app: cold 41.4 ms / 1 app query vs warm 20.3 ms / **0 app queries** (database store).
-
-See [`docs/implementation/phase-2-progress.md`](docs/implementation/phase-2-progress.md).
 
 ## Safety model
 
@@ -270,10 +277,9 @@ at each request/job boundary. The package resets automatically on queued jobs an
 events; a custom `while` loop must reset it itself when it expects to observe writes from other
 processes.
 
-The package was dogfooded in a real Filament 5 ERP app (4 resources, relation managers, select-heavy
-forms, custom page/actions, widgets, plain-Livewire front-office pages) with 3,000 products /
-2,500 purchase orders / 5,000 invoices; warm Filament list pages execute **zero** ERP-table queries.
-See [`docs/implementation/phase-1-dogfood.md`](docs/implementation/phase-1-dogfood.md).
+The package runs its own PHP/Laravel and real-driver CI matrix. Production-like ERP workloads are used
+for integration and benchmark runs; see the [benchmark report](docs/implementation/benchmark-report.md)
+for dataset, method and per-workload results.
 
 ## For AI agents (Laravel Boost)
 
@@ -281,11 +287,11 @@ The package ships a Laravel Boost skill at
 [`resources/boost/skills/oomycache-development/SKILL.md`](resources/boost/skills/oomycache-development/SKILL.md).
 When the package is installed in a Laravel app, Boost-aware agents discover it automatically and get
 installation, configuration, per-query API, invalidation, command, tenancy and anti-pattern guidance —
-including the Filament bridge being optional. The package-level [`AGENTS.md`](AGENTS.md) documents the
-maintenance conventions for agents working on OoMyCache itself.
+including the Filament bridge being optional.
 
 ## Documentation
 
+- [`docs/implementation/benchmark-report.md`](docs/implementation/benchmark-report.md) — measured impact and method
 - [`docs/implementation/production-runbook.md`](docs/implementation/production-runbook.md) — production rollout
 - [`docs/implementation/adoption-checklist.md`](docs/implementation/adoption-checklist.md) — model adoption gates
 - [`docs/implementation/store-selection.md`](docs/implementation/store-selection.md) — store trade-offs
