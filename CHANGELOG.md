@@ -1,5 +1,16 @@
 # Release Notes
 
+## 0.1.3 - 2026-11-12
+
+### Fixed
+
+- `QueryCacheBuilder` is now generic (`@template TModel`, `@extends Builder<TModel>`) and
+  `HasQueryCache::newEloquentBuilder()` returns `QueryCacheBuilder<static>`. Larastan/PHPStan keep the
+  concrete cached model type instead of falling back to `Model`, eliminating hundreds of false
+  undefined-property/method errors in host applications.
+- `sum()`, `avg()`, `min()` and `max()` accept `Expression` columns as well as strings, matching the
+  Laravel builder signatures used by Filament/dashboard widgets.
+
 ## 0.1.2 - 2026-11-11
 
 ### Fixed

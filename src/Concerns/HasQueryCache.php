@@ -46,6 +46,9 @@ trait HasQueryCache
         );
     }
 
+    /**
+     * @return QueryCacheBuilder<static>
+     */
     public function newEloquentBuilder($query): QueryCacheBuilder
     {
         return new QueryCacheBuilder($query, app(QueryCacheEngine::class));

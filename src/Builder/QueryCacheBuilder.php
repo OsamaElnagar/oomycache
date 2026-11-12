@@ -35,7 +35,9 @@ use Throwable;
  * pages are never cached.
  */
 /**
- * @extends Builder<Model>
+ * @template TModel of Model
+ *
+ * @extends Builder<TModel>
  */
 class QueryCacheBuilder extends Builder
 {
@@ -65,6 +67,9 @@ class QueryCacheBuilder extends Builder
         parent::setModel($model);
         $this->syncBaseContext();
 
+        // The parent intentionally re-binds the builder to the new model; its
+        // generic is the same instance-level builder after setModel().
+        // @phpstan-ignore return.type
         return $this;
     }
 
@@ -124,7 +129,7 @@ class QueryCacheBuilder extends Builder
 
     /**
      * @param  array<int, mixed>|string  $columns
-     * @return Collection<int, Model>
+     * @return Collection<int, TModel>
      */
     public function get($columns = ['*']): Collection
     {
@@ -133,6 +138,7 @@ class QueryCacheBuilder extends Builder
 
     /**
      * @param  array<int, mixed>|string  $columns
+     * @return TModel|null
      */
     public function first($columns = ['*']): ?Model
     {
@@ -171,7 +177,7 @@ class QueryCacheBuilder extends Builder
     }
 
     /**
-     * @param  string  $column
+     * @param  string|Expression  $column
      */
     public function sum($column): mixed
     {
@@ -179,7 +185,7 @@ class QueryCacheBuilder extends Builder
     }
 
     /**
-     * @param  string  $column
+     * @param  string|Expression  $column
      */
     public function avg($column): mixed
     {
@@ -187,7 +193,7 @@ class QueryCacheBuilder extends Builder
     }
 
     /**
-     * @param  string  $column
+     * @param  string|Expression  $column
      */
     public function min($column): mixed
     {
@@ -195,7 +201,7 @@ class QueryCacheBuilder extends Builder
     }
 
     /**
-     * @param  string  $column
+     * @param  string|Expression  $column
      */
     public function max($column): mixed
     {
@@ -589,7 +595,7 @@ class QueryCacheBuilder extends Builder
 
     /**
      * @param  array<int, mixed>|string  $columns
-     * @return Collection<int, Model>
+     * @return Collection<int, TModel>
      */
     protected function getFromDatabase(array|string $columns = ['*']): Collection
     {

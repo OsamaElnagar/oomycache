@@ -45,6 +45,9 @@ final class QueryContext
     ) {}
 
     /**
+     * @template TModel of Model
+     *
+     * @param  QueryCacheBuilder<TModel>  $builder
      * @param  array<int, mixed>|string  $columns
      * @param  array<string, mixed>  $options
      * @param  array<string, mixed>  $extra
