@@ -42,6 +42,7 @@ final class QueryContext
         public readonly ?string $keySuffix,
         public readonly mixed $cacheIf,
         public readonly array $pagination = [],
+        public readonly ?int $negativeTtlOverride = null,
     ) {}
 
     /**
@@ -131,6 +132,7 @@ final class QueryContext
             keySuffix: $extra['key_suffix'] ?? null,
             cacheIf: $extra['cache_if'] ?? null,
             pagination: $extra['pagination'] ?? [],
+            negativeTtlOverride: $extra['negative_ttl'] ?? null,
         );
     }
 }

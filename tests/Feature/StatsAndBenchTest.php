@@ -2,10 +2,12 @@
 
 declare(strict_types=1);
 
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Event;
 use Oomycache\Oomycache\Cache\QueryCacheEngine;
 use Oomycache\Oomycache\Contracts\VersionStore;
 use Oomycache\Oomycache\Events\QueryCacheInvalidated;
+use Oomycache\Oomycache\Stats\CacheStats;
 use Workbench\App\Models\Category;
 use Workbench\App\Models\Product;
 
@@ -77,6 +79,69 @@ it('records empty-result bypasses when negative caching is disabled', function (
     $stats = app(QueryCacheEngine::class)->status()['stats'];
 
     expect($stats['empty_bypasses'])->toBeGreaterThanOrEqual(1);
+});
+
+it('counts atomic increments without losing observations', function (): void {
+    $stats = app(CacheStats::class);
+    $stats->reset();
+
+    for ($i = 1; $i <= 150; $i++) {
+        $stats->record('hits');
+    }
+
+    // A second recorder instance shares the same store, like concurrent workers.
+    $other = new CacheStats(app('cache'), app('config'));
+
+    for ($i = 1; $i <= 50; $i++) {
+        $other->record('hits');
+    }
+
+    expect($stats->snapshot()['hits'])->toBe(200);
+});
+
+it('reports the real age of the current stats window', function (): void {
+    $stats = app(CacheStats::class);
+    $stats->reset();
+    $stats->record('hits');
+
+    expect($stats->snapshot()['window_seconds'])->toBeLessThan(5);
+
+    $windowKey = (string) config('oomycache.prefix', 'oomycache').':stats:window_start';
+    Cache::store()->put($windowKey, time() - 120, 3600);
+
+    expect($stats->snapshot()['window_seconds'])->toBeGreaterThanOrEqual(120);
+});
+
+it('resets counters and restarts the stats window', function (): void {
+    $stats = app(CacheStats::class);
+    $stats->reset();
+    $stats->record('hits');
+    $stats->record('misses');
+
+    expect($stats->snapshot()['hits'])->toBe(1)
+        ->and($stats->snapshot()['misses'])->toBe(1);
+
+    $stats->reset();
+    $snapshot = $stats->snapshot();
+
+    expect($snapshot['hits'])->toBe(0)
+        ->and($snapshot['misses'])->toBe(0)
+        ->and($snapshot['window_seconds'])->toBeLessThan(5);
+
+    $stats->record('hits');
+
+    expect($stats->snapshot()['hits'])->toBe(1);
+});
+
+it('returns a zeroed snapshot when stats are disabled', function (): void {
+    config(['oomycache.stats.enabled' => false]);
+
+    $snapshot = app(CacheStats::class)->snapshot();
+
+    expect($snapshot['enabled'])->toBeFalse()
+        ->and($snapshot['window_seconds'])->toBe(0)
+        ->and($snapshot['hits'])->toBe(0)
+        ->and($snapshot['misses'])->toBe(0);
 });
 
 it('runs the bench command for a cacheable model', function (): void {

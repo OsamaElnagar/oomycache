@@ -117,6 +117,12 @@ Product::query()->dontCache()->get();
 Product::query()->cacheKey('catalog-v2')->get();
 Product::query()->cacheIf(fn ($result) => $result->isNotEmpty())->get();
 
+// cache an empty result for a short time (zero counts, false exists(), empty lists)
+Product::query()->where('sku', 'missing')->cacheNegativeFor(30)->count();
+Product::query()->cacheFor(300, negativeTtl: 30)->where('sku', 'missing')->first();
+// `cursorPaginate()` is cached too; each cursor position is a distinct key.
+Product::query()->orderBy('id')->cursorPaginate(50);
+
 // namespace operations (O(1) version bumps, never touches other cache keys)
 Product::flushQueryCache();
 Oomycache::flush([Product::class, Category::class]);
@@ -127,6 +133,21 @@ Many-to-many pivots are covered automatically for cacheable models: the package 
 `belongsToMany`, `morphToMany` and the `morphedByMany` inverse, and flushes both table namespaces
 after `attach`, `detach`, `sync`, `toggle` and pivot updates (disable with
 `OOMYCACHE_PIVOT_INVALIDATION=false`). Raw pivot-table writes still need an explicit flush.
+
+### Negative results and stats
+
+Empty results are not cached by default (`cache.negative=false`): they are re-queried and counted
+as `empty_bypasses`. Pass a per-call negative TTL when an expensive query legitimately returns
+nothing — `cacheNegativeFor(30)` or `cacheFor(300, negativeTtl: 30)`. This is the only way integer
+and boolean aggregate results (a zero count/sum, `exists() === false`, `doesntExist() === true`)
+become negative-eligible; without it their historical TTL behavior is unchanged. A per-call TTL of
+`0` or less keeps an empty result uncached. `cache.negative_ttl` is also available as a model/preset
+option and is re-read by `QueryCacheEngine::forgetOptions()`.
+
+`oomycache.stats` counters use the store's atomic `increment()`, so concurrent requests cannot lose
+observations. `window_seconds` reports the actual age of the current counter window, and
+`app(\Oomycache\Oomycache\Stats\CacheStats::class)->reset()` starts a fresh window (it never calls
+`Cache::flush()` or touches version tokens).
 
 ### Caching raw report/dashboard queries
 
@@ -220,6 +241,10 @@ The bridge is a standalone companion package, [`osamaelnagar/oomycache-filament`
   tokens, live stats counters, selective model invalidation and a global purge action;
 - an `ActionCalled` **invalidator** for Filament actions that bypass Eloquent events
   (attach/detach/associate/dissociate/reorder/import and the bulk mass branches).
+
+The core publishes `filament.dashboard.navigation_badge` (`off` by default) for the bridge's studio
+badge (`hit-rate`, `invalidations`, `models` or `off`); the core itself renders nothing and has no
+Filament dependency.
 
 ```bash
 composer require osamaelnagar/oomycache osamaelnagar/oomycache-filament

@@ -97,8 +97,19 @@ return [
         'invalidate_after_commit' => true,
         'intercept_mass_writes' => true,
         'skip_in_console' => false,
+
+        // fail_silently covers cache READ/WRITE paths only: a failed cache
+        // lookup or write reports the error and falls back to the database.
+        // It never changes invalidation behavior, because version tokens are
+        // the correctness layer.
         'fail_silently' => true,
         'log_invalidation_failures' => true,
+
+        // A failed version bump is a correctness incident: the default is to
+        // log critical and rethrow so a model save cannot silently leave stale
+        // entries. Set to false only if stale reads during a cache-store outage
+        // are preferable to a failed write.
+        'throw_on_invalidation_failure' => env('OOMYCACHE_THROW_ON_INVALIDATION_FAILURE', true),
         'max_payload_bytes' => 1_048_576,
     ],
 
@@ -276,6 +287,10 @@ return [
             'navigation_label' => 'Query Cache',
             'navigation_group' => null,
             'navigation_sort' => null,
+
+            // Studio navigation badge read by the companion bridge package:
+            // hit-rate / invalidations / models / off. Core does not render it.
+            'navigation_badge' => 'off',
         ],
     ],
 

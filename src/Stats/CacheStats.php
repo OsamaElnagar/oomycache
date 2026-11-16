@@ -14,10 +14,17 @@ use Throwable;
  *
  * Stats are off by default; event listeners are always registered but each
  * record() is a no-op unless `oomycache.stats.enabled` is true.
+ *
+ * Counters use the store's atomic increment so concurrent requests cannot lose
+ * an observation, and a shared `window_start` key describes the real age of the
+ * current counter window. A fixed window expires with `oomycache.stats.ttl`;
+ * reset() starts a fresh one immediately.
  */
 final class CacheStats
 {
     private const array METRICS = ['hits', 'misses', 'bypasses', 'empty_bypasses', 'invalidations', 'clears'];
+
+    private const string WINDOW_START = 'window_start';
 
     public function __construct(
         private readonly CacheManager $cache,
@@ -44,8 +51,39 @@ final class CacheStats
         try {
             $repository = $this->repository();
             $key = $this->key($metric);
-            $current = (int) $repository->get($key, 0);
-            $repository->put($key, $current + 1, $this->ttl());
+
+            // Seeding with add() is required by drivers whose increment() does
+            // not create a missing key (array, database, memcached). add() is
+            // also atomic and never fires cache events, so it cannot double
+            // count through an event listener.
+            $repository->add($this->key(self::WINDOW_START), time(), $this->ttl());
+            $repository->add($key, 0, $this->ttl());
+            $repository->increment($key);
+        } catch (Throwable) {
+            // Metrics must never break a request.
+        }
+    }
+
+    /**
+     * Start a fresh counter window: zero every metric and reset the clock.
+     *
+     * This forgets only `oomycache.prefix.:stats:*` keys; it never touches the
+     * application cache or OoMyCache version tokens.
+     */
+    public function reset(): void
+    {
+        if (! $this->enabled()) {
+            return;
+        }
+
+        try {
+            $repository = $this->repository();
+
+            foreach ([...self::METRICS, self::WINDOW_START] as $name) {
+                $repository->forget($this->key($name));
+            }
+
+            $repository->add($this->key(self::WINDOW_START), time(), $this->ttl());
         } catch (Throwable) {
             // Metrics must never break a request.
         }
@@ -58,7 +96,7 @@ final class CacheStats
     {
         $snapshot = [
             'enabled' => $this->enabled(),
-            'window_seconds' => $this->ttl(),
+            'window_seconds' => 0,
             'hits' => 0,
             'misses' => 0,
             'bypasses' => 0,
@@ -73,6 +111,12 @@ final class CacheStats
 
         try {
             $repository = $this->repository();
+            $windowStart = (int) $repository->get($this->key(self::WINDOW_START), 0);
+
+            if ($windowStart > 0) {
+                $ttl = $this->ttl();
+                $snapshot['window_seconds'] = max(0, min($ttl, time() - $windowStart));
+            }
 
             foreach (self::METRICS as $metric) {
                 $snapshot[$metric] = (int) $repository->get($this->key($metric), 0);

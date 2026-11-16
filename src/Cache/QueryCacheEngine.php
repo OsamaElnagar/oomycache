@@ -122,6 +122,7 @@ final class QueryCacheEngine
             'cache_single_records' => (bool) $this->config->get('oomycache.cache.single_records', true),
             'cache_value_and_pluck' => (bool) $this->config->get('oomycache.cache.value_and_pluck', true),
             'negative' => (bool) $this->config->get('oomycache.cache.negative', false),
+            'negative_ttl' => (int) $this->config->get('oomycache.cache.negative_ttl', 10),
             'dependencies' => [],
             'skip_query_patterns' => (array) $this->config->get('oomycache.cache.skip_query_patterns', []),
         ];
@@ -276,7 +277,14 @@ final class QueryCacheEngine
         $this->dispatchMissed($context, $key, $corrupt ? 'corrupt-payload' : 'miss');
         $value = $execute();
 
-        if (! ($context->options['negative'] ?? false) && $this->isEmptyResult($value)) {
+        // A per-call negative TTL makes aggregate values such as 0/false
+        // negative-eligible. Without one, isEmptyResult() keeps its original
+        // meaning and default behavior is unchanged.
+        $negativeTtl = $context->negativeTtlOverride;
+        $empty = $this->isEmptyResult($value)
+            || ($negativeTtl !== null && $this->isEmptyAggregateResult($value, $context->intent));
+
+        if ($empty && ($negativeTtl !== null ? $negativeTtl < 1 : ! ($context->options['negative'] ?? false))) {
             $this->dispatchBypassed($context, 'negative-disabled');
 
             return $value;
@@ -300,8 +308,8 @@ final class QueryCacheEngine
             }
 
             $encoded = $this->compressor->compress($encoded);
-            $ttl = $this->isEmptyResult($value)
-                ? max(1, (int) $this->config->get('oomycache.cache.negative_ttl', 10))
+            $ttl = $empty
+                ? max(1, $negativeTtl ?? (int) ($context->options['negative_ttl'] ?? 10))
                 : $this->resolveTtl($context);
 
             // M1: hard total-size cap for chunked payloads — bypass even when
@@ -704,7 +712,43 @@ final class QueryCacheEngine
 
         /** @var Model $model */
         $model = new $modelClass;
-        $this->flushTable($model->getTable(), $model->getConnection()->getName(), $reason);
+        $table = $model->getTable();
+        $connection = $model->getConnection()->getName();
+
+        try {
+            $this->flushTable($table, $connection, $reason);
+        } catch (Throwable $exception) {
+            $this->handleInvalidationFailure($exception, [
+                'table' => $table,
+                'connection' => $connection,
+                'reason' => $reason,
+            ]);
+        }
+    }
+
+    /**
+     * Log an invalidation failure and either rethrow it (default) or continue.
+     *
+     * `safety.fail_silently` deliberately does NOT apply here: it only governs
+     * cache read/write paths. Invalidation is the correctness layer, so a
+     * failure stays loud unless `throw_on_invalidation_failure` is explicitly
+     * disabled.
+     *
+     * @param  array<string, mixed>  $context
+     */
+    private function handleInvalidationFailure(Throwable $exception, array $context): void
+    {
+        if ((bool) $this->config->get('oomycache.safety.log_invalidation_failures', true)
+            && function_exists('logger')) {
+            logger()->critical('OoMyCache invalidation failed.', $context + [
+                'exception' => $exception::class,
+                'message' => $exception->getMessage(),
+            ]);
+        }
+
+        if ((bool) $this->config->get('oomycache.safety.throw_on_invalidation_failure', true)) {
+            throw $exception;
+        }
     }
 
     public function flushModelAfterWrite(Model $model, string $reason = 'write'): void
@@ -1066,6 +1110,25 @@ final class QueryCacheEngine
         return $value === null
             || $value === []
             || ($value instanceof Countable && count($value) === 0);
+    }
+
+    /**
+     * Semantically-empty aggregate values (a zero count/sum, a false exists(),
+     * a true doesntExist()). Only consulted when the caller supplied a per-call
+     * negative TTL, so zero counts keep their historical full-TTL treatment by
+     * default.
+     */
+    private function isEmptyAggregateResult(mixed $value, string $intent): bool
+    {
+        if (! in_array($intent, ['count', 'exists', 'doesntExist', 'sum', 'avg', 'min', 'max'], true)) {
+            return false;
+        }
+
+        return $value === 0
+            || $value === 0.0
+            || $value === '0'
+            || $value === false
+            || ($intent === 'doesntExist' && $value === true);
     }
 
     private function dispatchRawHit(string $key): void

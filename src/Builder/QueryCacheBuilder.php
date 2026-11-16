@@ -12,6 +12,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Query\Builder as QueryBuilder;
+use Illuminate\Pagination\Cursor;
 use Illuminate\Pagination\CursorPaginator;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Pagination\Paginator;
@@ -23,6 +24,7 @@ use Oomycache\Oomycache\Query\BaseQueryContext;
 use Oomycache\Oomycache\Query\DependencyRecorder;
 use Oomycache\Oomycache\Query\QueryContext;
 use Oomycache\Oomycache\Query\TableRecorder;
+use Stringable;
 use Throwable;
 
 /**
@@ -47,11 +49,19 @@ class QueryCacheBuilder extends Builder
 
     private ?int $ttlOverride = null;
 
+    private ?int $negativeTtlOverride = null;
+
     private bool $forever = false;
 
     private ?string $keySuffix = null;
 
     private mixed $cacheIf = null;
+
+    /** Set while Laravel prepares a cursor page, so the raw rows can be cached. */
+    private bool $captureCursorItems = false;
+
+    /** @var Collection<int, TModel>|null */
+    private ?Collection $capturedCursorItems = null;
 
     private DependencyRecorder $dependencyRecorder;
 
@@ -88,9 +98,28 @@ class QueryCacheBuilder extends Builder
      * Fluent per-query API
      * ------------------------------------------------------------------ */
 
-    public function cacheFor(int|DateInterval $ttl): static
+    public function cacheFor(int|DateInterval $ttl, ?int $negativeTtl = null): static
     {
         $this->ttlOverride = $ttl instanceof DateInterval ? $this->dateIntervalToSeconds($ttl) : $ttl;
+
+        if ($negativeTtl !== null) {
+            $this->negativeTtlOverride = $negativeTtl;
+        }
+
+        return $this;
+    }
+
+    /**
+     * Cache a semantically-empty result of this query (e.g. a zero count or a
+     * false exists()) for the given number of seconds.
+     *
+     * Supplying a per-call negative TTL is the only way to make integer/bool
+     * aggregate results negative-eligible; without it, default behavior is
+     * unchanged. Pass 0 or less to keep an empty result uncached.
+     */
+    public function cacheNegativeFor(int $ttl): static
+    {
+        $this->negativeTtlOverride = $ttl;
 
         return $this;
     }
@@ -133,6 +162,13 @@ class QueryCacheBuilder extends Builder
      */
     public function get($columns = ['*']): Collection
     {
+        // Laravel's cursor paginator calls get() after applying its predicate.
+        // captureCursorItems lets that one call return the raw rows so the
+        // cursor page can be cached and the paginator rebuilt on a hit.
+        if ($this->captureCursorItems) {
+            return $this->capturedCursorItems = $this->getFromDatabase($columns);
+        }
+
         return $this->cacheRead('get', $columns, fn (): mixed => $this->getFromDatabase($columns));
     }
 
@@ -291,9 +327,43 @@ class QueryCacheBuilder extends Builder
         ]);
     }
 
+    /**
+     * Cache a cursor page by its effective cursor instead of re-querying it.
+     *
+     * The cached value is the raw (perPage + 1) item collection; the paginator
+     * is rebuilt on both hits and misses so hasMore/nextCursor/path/name stay
+     * identical to Laravel's own cursorPaginate().
+     *
+     * @param  int|null  $perPage
+     * @param  array<int, mixed>|string  $columns
+     * @param  string  $cursorName
+     * @param  Cursor|string|null  $cursor
+     */
     public function cursorPaginate($perPage = null, $columns = ['*'], $cursorName = 'cursor', $cursor = null): CursorPaginator
     {
-        return parent::cursorPaginate($perPage, $columns, $cursorName, $cursor);
+        $perPage = (int) ($perPage ?: $this->getModel()->getPerPage());
+        $resolvedCursor = $this->resolveCursor($cursorName, $cursor);
+
+        /** @var Collection<int, TModel> $items */
+        $items = $this->cacheRead(
+            'cursorPaginate',
+            $columns,
+            fn (): mixed => $this->fetchCursorItems($perPage, $columns, $cursorName, $resolvedCursor),
+            ['pagination' => [
+                // The cursor predicate is not part of the base SQL/bindings
+                // captured by QueryContext, so include the effective cursor
+                // here to keep pages distinct.
+                'cursor' => $resolvedCursor?->encode(),
+                'per_page' => $perPage,
+                'cursor_name' => $cursorName,
+            ]],
+        );
+
+        return $this->cursorPaginator($items, $perPage, $resolvedCursor, [
+            'path' => Paginator::resolveCurrentPath(),
+            'cursorName' => $cursorName,
+            'parameters' => $this->cursorPaginationParameters($resolvedCursor),
+        ]);
     }
 
     /* ---------------------------------------------------------------------
@@ -551,6 +621,80 @@ class QueryCacheBuilder extends Builder
      * ------------------------------------------------------------------ */
 
     /**
+     * Resolve a cursor exactly as Laravel does so the cache key and the
+     * rebuilt paginator use the same effective cursor.
+     */
+    private function resolveCursor(string $cursorName, mixed $cursor): ?Cursor
+    {
+        if ($cursor instanceof Cursor) {
+            return $cursor;
+        }
+
+        if (is_string($cursor)) {
+            return Cursor::fromEncoded($cursor);
+        }
+
+        $resolved = CursorPaginator::resolveCurrentCursor($cursorName, $cursor);
+
+        return $resolved instanceof Cursor ? $resolved : null;
+    }
+
+    /**
+     * Let Laravel apply the cursor predicate/order/limit, then keep the raw
+     * rows it fetched before the paginator slices/reverses them.
+     *
+     * @param  array<int, mixed>|string  $columns
+     * @return Collection<int, TModel>
+     */
+    private function fetchCursorItems(int $perPage, array|string $columns, string $cursorName, ?Cursor $cursor): Collection
+    {
+        $pageQuery = clone $this;
+        $pageQuery->captureCursorItems = true;
+
+        try {
+            $pageQuery->runParentCursorPaginate($perPage, $columns, $cursorName, $cursor);
+
+            return $pageQuery->capturedCursorItems ?? $pageQuery->getModel()->newCollection();
+        } finally {
+            $pageQuery->captureCursorItems = false;
+            $pageQuery->capturedCursorItems = null;
+        }
+    }
+
+    /**
+     * @param  array<int, mixed>|string  $columns
+     */
+    private function runParentCursorPaginate(int $perPage, array|string $columns, string $cursorName, ?Cursor $cursor): void
+    {
+        // Laravel's cursor paginator expects plain string columns.
+        $normalized = array_values(array_map(
+            static fn (mixed $column): string => is_string($column)
+                ? $column
+                : (is_scalar($column) || $column instanceof Stringable ? (string) $column : '*'),
+            is_array($columns) ? $columns : [$columns],
+        ));
+
+        parent::cursorPaginate($perPage, $normalized === [] ? ['*'] : $normalized, $cursorName, $cursor);
+    }
+
+    /**
+     * The cursor paginator needs the ordered columns to derive next/previous
+     * cursors; recompute them from a prepared clone on both hits and misses.
+     *
+     * @return list<string>
+     */
+    private function cursorPaginationParameters(?Cursor $cursor): array
+    {
+        $prepared = clone $this;
+        $orders = $prepared->ensureOrderForCursorPagination($cursor?->pointsToPreviousItems() ?? false);
+
+        /** @var list<string> $columns */
+        $columns = $orders->pluck('column')->map(static fn (mixed $column): string => (string) $column)->values()->all();
+
+        return $columns;
+    }
+
+    /**
      * @param  array<int, mixed>|string  $columns
      * @param  array<string, mixed>  $extra
      */
@@ -574,6 +718,7 @@ class QueryCacheBuilder extends Builder
                 $this->engine->optionsFor($model::class),
                 [
                     'ttl' => $this->forever ? 0 : $this->ttlOverride,
+                    'negative_ttl' => $this->negativeTtlOverride,
                     'key_suffix' => $this->keySuffix,
                     'cache_if' => $this->cacheIf,
                 ] + $extra,

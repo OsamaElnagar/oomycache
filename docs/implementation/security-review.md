@@ -77,11 +77,17 @@ At the 00:30 baseline the core suite was **53 passed / 3 failed / 215 assertions
   returns 
 one; multi-tenant operators must configure a composite resolver that fails closed
   outside a panel.
-- **M3 — fixed (logging wired, loud throw retained).** InvalidationManager::flushModel() wraps the
-  version bump: on failure it logs a critical message with table/connection/reason/exception class
-  (respecting oomycache.safety.log_invalidation_failures) and then rethrows, preserving the ADR
-  "invalidations are correctness incidents" behaviour. This closes the config-drift/observability gap;
-  the throw-on-outage semantics remain intentional and documented.- **M1/L2/L3 — fixed (payload security).** payload.chunking.max_total_bytes (2 MiB) is now a
+- **M3 — fixed (logging wired, loud throw retained, explicit opt-out added).**
+  InvalidationManager::flushModel() and QueryCacheEngine::flushModel() wrap the version bump: on
+  failure they log a critical message with table/connection/reason/exception class (respecting
+  oomycache.safety.log_invalidation_failures) and then rethrow, preserving the ADR "invalidations
+  are correctness incidents" behaviour. The remaining drift was that `safety.fail_silently`
+  looked like a global switch: it is now documented as covering **cache read/write paths only**,
+  and the dedicated `safety.throw_on_invalidation_failure` key (default `true`) is the only way to
+  make automatic invalidation log-and-continue. Disabling it accepts stale entries during a
+  cache-store outage; the default still fails the write. Both branches are covered by tests using
+  a throwing VersionStore.
+- **M1/L2/L3 — fixed (payload security).** payload.chunking.max_total_bytes (2 MiB) is now a
   hard cap independent of max_chunks; oversized chunked writes bypass and oversized reconstructed
   manifests are treated as corrupt/miss with cleanup. payload.compression.max_bytes (2 MiB) caps
   decompression (max_length where supported + post-decode length check; overflow = corrupt miss).

@@ -1,5 +1,36 @@
 # Release Notes
 
+## 0.1.4 - 2026-11-16
+
+### Added
+
+- `QueryCacheBuilder::cacheNegativeFor(int $ttl)` and a `negativeTtl:` named argument on
+  `cacheFor()`. Supplying a per-call negative TTL makes semantically-empty aggregate results
+  (a zero `count`/`sum`, `false` from `exists()`, `true` from `doesntExist()`) negative-eligible
+  and stores them for that TTL. Without it, default behavior is unchanged: zero counts still use
+  the regular TTL and empty collections are still bypassed. `cache.negative_ttl` is now part of
+  the model option set (so presets/`queryCacheOptions()` can override it and `forgetOptions()`
+  refreshes it).
+- Cached `cursorPaginate()`. Pages are keyed by the effective cursor (plus per-page and cursor
+  name), the raw `perPage + 1` rows are cached, and the `CursorPaginator` is rebuilt on hits so
+  items, `hasMorePages()`, `nextCursor()`, path and cursor name round-trip. Cacheable-model writes
+  invalidate cursor pages through the normal table version token.
+- `safety.throw_on_invalidation_failure` (default `true`, env `OOMYCACHE_THROW_ON_INVALIDATION_FAILURE`)
+  gives operators an explicit, dedicated opt-out for loud invalidation failures in
+  `QueryCacheEngine::flushModel()` / `InvalidationManager::flushModel()`. `safety.fail_silently`
+  continues to cover **cache read/write paths only**; it never suppresses invalidation failures.
+- `filament.dashboard.navigation_badge` (`off` by default) — config surface read by the companion
+  bridge package for the studio badge; the core package does not render it.
+- Stats counters use atomic `Cache::increment()` (seeded with `Cache::add()`), so concurrent
+  requests no longer lose observations and the counters do not rely on cache events. A shared
+  `window_start` key makes `snapshot()['window_seconds']` the real age of the counter window, and
+  `CacheStats::reset()` starts a fresh window without flushing the application cache.
+
+### Changed
+
+- Dev-only: pin `phpstan/phpstan` to 2.3.5. The type-coverage plugin used by `composer test` calls
+  `AnalyserResult::getCollectedData()`, which was removed in 2.3.6.
+
 ## 0.1.3 - 2026-11-12
 
 ### Fixed

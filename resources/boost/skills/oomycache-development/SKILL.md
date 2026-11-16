@@ -63,6 +63,13 @@ Product::query()->dontCache()->get();
 Product::query()->cacheKey('catalog-v2')->get();
 Product::query()->cacheIf(fn ($rows) => $rows->isNotEmpty())->get();
 
+// Empty results: cache a zero count / false exists() / empty list for 30s only.
+Product::query()->where('sku', 'missing')->cacheNegativeFor(30)->count();
+Product::query()->cacheFor(300, negativeTtl: 30)->where('sku', 'missing')->first();
+
+// All three paginators are cached; cursor pages are keyed by the effective cursor.
+Product::query()->orderBy('id')->cursorPaginate(50);
+
 Product::flushQueryCache();                 // invalidate this model's namespace
 Oomycache::flush([Product::class]);         // invalidate specific models
 Oomycache::clear();                         // bump the global version token
@@ -114,6 +121,9 @@ writes invalidate the entry automatically; otherwise flush explicitly.
   `cache.pivot_invalidation`, default true).
 - Raw/quiet writes need explicit `flushTables()`; `rememberQuery()` caches empty raw results only with
   `cache.negative=true` or a per-call `negativeTtl` argument.
+- Eloquent empty results behave the same way: use `cacheNegativeFor()` / `cacheFor(..., negativeTtl: ...)`
+  to cache one zero count, false `exists()` or empty list without enabling global negative caching.
+  Without a per-call TTL, zero counts keep the regular TTL and empty collections are bypassed.
 - Bypass reason precedence: term-dependent search is reported as `search-query` *before*
   `skip_query_patterns` can report `excluded-pattern`. Both are bypasses; do not use the reason alone
   to decide whether a pattern was checked.
@@ -167,12 +177,16 @@ Read `config/oomycache.php` and `docs/implementation/config-reference.md` instea
 
 - `enabled`, `store`, `prefix`, `version`, `ttl`, `ttl_jitter`
 - `cache.*` — which read shapes are cached; keep `search_terms=false` unless intentional
-- `safety.*` — transaction guards, mass-write interception, failure logging
+- `safety.*` — transaction guards, mass-write interception, failure logging. `fail_silently` covers
+  cache read/write fallbacks only; `throw_on_invalidation_failure` (default `true`) separately keeps
+  a failed version bump loud. Set it to `false` only if stale reads during a store outage are
+  preferable to a failed write.
 - `payload.*` — arrays JSON (the only mode), compression, chunking caps, per-request memo
 - `tenant.resolver` — class implementing `Oomycache\Oomycache\Contracts\TenantResolver`; required for
   multi-tenant queue/console/API entrypoints that are outside a Filament panel
 - `filament.dashboard.can_purge` — **deny-by-default** Gate required for the bridge's destructive
-  actions; `can_view` optionally restricts the studio page
+  actions; `can_view` optionally restricts the studio page; `navigation_badge` (`off` by default)
+  selects the bridge studio badge (`hit-rate`/`invalidations`/`models`/`off`)
 
 ## Filament bridge (optional)
 
@@ -194,7 +208,10 @@ php artisan test --compact            # app suite
 
 Expect `warm` to report **0 app queries** and invalidation to be version-token based. On the database
 store the JSON also reports `store_queries` separately: 0 app queries is not 0 SQL statements.
-Empty results are not cached unless `cache.negative=true`; they show up as `empty_bypasses` in stats.
+Empty results are not cached unless `cache.negative=true` or the read supplies a per-call
+`negativeTtl`; they show up as `empty_bypasses` in stats. Stats counters are updated atomically and
+`app(\Oomycache\Oomycache\Stats\CacheStats::class)->reset()` starts a fresh stats window (never a
+global `Cache::flush()`).
 
 ## Anti-patterns
 

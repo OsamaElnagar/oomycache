@@ -24,7 +24,7 @@
 | `cache.single_records` | `true` | engine options | `find`/route-binding-shaped single reads |
 | `cache.value_and_pluck` | `true` | engine options | `value`/`pluck` |
 | `cache.negative` | `false` | engine options | cache empty/null results; off by default. When false, empty results are re-queried every time and counted as `empty_bypasses` in stats. `rememberQuery()` also accepts a per-call `negativeTtl` argument to cache one raw empty result. |
-| `cache.negative_ttl` | `10` | engine | TTL for negative entries |
+| `cache.negative_ttl` | `10` | engine options | TTL for negative entries; also a model/preset option (refreshed by `forgetOptions()`). Per-call `cacheNegativeFor()` / `cacheFor(..., negativeTtl: ...)` overrides it for one query and makes zero/bool aggregate results negative-eligible |
 | `cache.invalidation_dedupe_ms` | `100` | engine | window for deduping builder-write + model-event notifications in one logical write chain; raise for slow hooks/listeners, `0` disables the time window (lifecycle reasons still dedupe) |
 | `cache.search_terms` | `false` | engine | cache user-search-shaped queries (unsafe-ish; keep off) |
 | `cache.skip_query_patterns` | `[]` | engine | raw SQL substrings never cached |
@@ -39,8 +39,9 @@
 | `safety.invalidate_after_commit` | `true` | writes inside a transaction flush after commit |
 | `safety.intercept_mass_writes` | `true` | builder `update/delete/insert/upsert/increment/...` flush namespaces |
 | `safety.skip_in_console` | `false` | bypass caching for artisan/console reads |
-| `safety.fail_silently` | `true` | report cache errors instead of throwing (invalidation stays loud) |
-| `safety.log_invalidation_failures` | `true` | log critical on failed version bumps before rethrowing |
+| `safety.fail_silently` | `true` | report **cache read/write** errors instead of throwing; it never changes invalidation behavior |
+| `safety.log_invalidation_failures` | `true` | log critical on failed version bumps before the (default) rethrow |
+| `safety.throw_on_invalidation_failure` | `true` | dedicated opt-out for loud invalidation: when `false`, failed version bumps in model flush paths are logged and swallowed. Stale entries during a store outage are the accepted trade-off |
 | `safety.max_payload_bytes` | `1048576` | single-key size cap when chunking is disabled |
 | `payload.mode` | `arrays` | **only `arrays` is implemented**; doctor fails otherwise |
 | `payload.memoize_per_request` | `true` | reuse decoded payloads within one request (purged on writes) |
@@ -60,7 +61,7 @@
 | `tenant.resolver` | `null` | class implementing `Contracts\TenantResolver`; validated by doctor |
 | `tenant.include_user` | `false` | bridge resolver adds a hashed user segment |
 | `events.enabled` / `events.hits` / `events.misses` / `events.invalidations` | `true` | event emission switches; invalidation/clear events are also suppressed while the package is disabled |
-| `stats.enabled` | `false` | cache-backed hit/miss/bypass/invalidation/clear counters; `empty_bypasses` tracks empty results skipped because negative caching is off |
+| `stats.enabled` | `false` | cache-backed hit/miss/bypass/invalidation/clear counters; `empty_bypasses` tracks empty results skipped because negative caching is off. Counters use atomic `increment()`; `window_seconds` is the real age of the window and `CacheStats::reset()` starts a new one |
 | `stats.store` | `null` | store for counters (defaults to `oomycache.store`, then Laravel's default cache store) |
 | `stats.ttl` | `3600` | counter window |
 | `stats.sample_rate` | `1.0` | `(0, 1]` sampling; validated |
@@ -75,6 +76,7 @@
 | `filament.dashboard.navigation_label` | `Query Cache` | studio navigation label |
 | `filament.dashboard.navigation_group` | `null` | studio navigation group; `null` inherits the panel default |
 | `filament.dashboard.navigation_sort` | `null` | studio navigation sort; lower values move it higher |
+| `filament.dashboard.navigation_badge` | `off` | bridge studio badge source: `hit-rate` / `invalidations` / `models` / `off`; core only publishes the key |
 
 ## 4. Removed in alpha (were advertised but unimplemented)
 

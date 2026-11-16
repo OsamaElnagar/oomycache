@@ -77,8 +77,15 @@ final class InvalidationManager
                     ]);
                 }
 
-                // Invalidation failures are correctness incidents: keep them loud.
-                throw $exception;
+                // Invalidation failures are correctness incidents: loud by
+                // default. `fail_silently` only covers cache read/write paths;
+                // this dedicated key is the explicit opt-out for operators who
+                // accept stale entries during a cache-store outage.
+                if ((bool) config('oomycache.safety.throw_on_invalidation_failure', true)) {
+                    throw $exception;
+                }
+
+                return null;
             }
         };
 
