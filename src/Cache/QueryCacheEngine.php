@@ -921,11 +921,24 @@ final class QueryCacheEngine
 
     public function dispatchBypassed(QueryContext $context, string $reason): void
     {
+        $this->dispatchBypassedForModel($context->modelClass, $context->intent, $reason);
+    }
+
+    /**
+     * Dispatch a bypass for a query that never produced a QueryContext (for
+     * example when its eager loads cannot be fingerprinted).
+     *
+     * A bypass is still an operational signal, so this honours only the global
+     * events switch, mirroring dispatchBypassed(). The caller is responsible for
+     * running the query uncached.
+     */
+    public function dispatchBypassedForModel(string $modelClass, string $intent, string $reason): void
+    {
         if (! (bool) $this->config->get('oomycache.events.enabled', true)) {
             return;
         }
 
-        $this->dispatcher()->dispatch(new QueryCacheBypassed($context->modelClass, $context->intent, $reason));
+        $this->dispatcher()->dispatch(new QueryCacheBypassed($modelClass, $intent, $reason));
     }
 
     private function intentBypassReason(QueryContext $context): ?string

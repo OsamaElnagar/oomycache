@@ -132,6 +132,70 @@ it('caches a Filament-style page and its total together', function (): void {
     expect($queries)->toBe(0);
 });
 
+it('caches and invalidates the paginator count of a grouped/having query', function (): void {
+    $categoryA = Category::query()->create(['name' => 'Group A', 'is_active' => true]);
+    $categoryB = Category::query()->create(['name' => 'Group B', 'is_active' => true]);
+
+    foreach ([1, 2, 3] as $index) {
+        Product::query()->create([
+            'category_id' => $categoryA->getKey(),
+            'sku' => 'GRP-A-'.$index,
+            'name' => 'Group A product '.$index,
+            'price' => 10,
+            'is_active' => true,
+            'stock_quantity' => 1,
+        ]);
+    }
+
+    Product::query()->create([
+        'category_id' => $categoryB->getKey(),
+        'sku' => 'GRP-B-1',
+        'name' => 'Group B product 1',
+        'price' => 10,
+        'is_active' => true,
+        'stock_quantity' => 1,
+    ]);
+
+    $grouped = fn () => Product::query()
+        ->select(['category_id', DB::raw('COUNT(*) as products_count')])
+        ->groupBy('category_id')
+        ->havingRaw('COUNT(*) > 1');
+
+    $uncachedCount = fn (): int => DB::table('products')
+        ->select(['category_id', DB::raw('COUNT(*) as products_count')])
+        ->groupBy('category_id')
+        ->havingRaw('COUNT(*) > 1')
+        ->get()
+        ->count();
+
+    $first = $grouped()->paginate(10);
+
+    expect($first->total())->toBe($uncachedCount())
+        ->and($first->total())->toBe(1);
+
+    $queries = oomycacheQueryCount(fn () => $grouped()->paginate(10));
+    expect($queries)->toBe(0);
+
+    foreach ([2, 3] as $index) {
+        Product::query()->create([
+            'category_id' => $categoryB->getKey(),
+            'sku' => 'GRP-B-'.$index,
+            'name' => 'Group B product '.$index,
+            'price' => 10,
+            'is_active' => true,
+            'stock_quantity' => 1,
+        ]);
+    }
+
+    $fresh = $grouped()->paginate(10);
+
+    expect($fresh->total())->toBe($uncachedCount())
+        ->and($fresh->total())->toBe(2);
+
+    $queries = oomycacheQueryCount(fn () => $grouped()->paginate(10));
+    expect($queries)->toBe(0);
+});
+
 it('invalidates eager-loaded relations when the related model is written', function (): void {
     oomycacheSeedProducts(3);
 

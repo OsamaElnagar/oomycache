@@ -291,6 +291,17 @@ return [
             // Studio navigation badge read by the companion bridge package:
             // hit-rate / invalidations / models / off. Core does not render it.
             'navigation_badge' => 'off',
+
+            // Full class name of the studio page used by the companion bridge.
+            // null lets the bridge use its own default; core does not render it.
+            'studio_page' => null,
+        ],
+
+        'invalidation' => [
+            // The companion bridge reads this to decide whether every Filament
+            // BulkAction triggers a flush. Safety default true; set false to
+            // limit flushes to known write actions only.
+            'flush_all_bulk_actions' => env('OOMYCACHE_FILAMENT_FLUSH_ALL_BULK_ACTIONS', true),
         ],
     ],
 

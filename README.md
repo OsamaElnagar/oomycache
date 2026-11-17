@@ -22,7 +22,10 @@
 </p>
 
 > **Status:** stable release, tested on PHP 8.3–8.5 and Laravel 12–13, with real cache-store and
-> database-driver CI lanes.
+> database-driver CI lanes. Caveats: the default file store is single-host only (use Redis or another
+> shared store for multi-host deployments); raw queries and `saveQuietly()` / `withoutEvents()` writes
+> need an explicit flush (`oomycache:audit` helps find them); never call `Cache::flush()` (use
+> `oomycache:clear`); reads inside a transaction bypass the cache; the Filament bridge is optional.
 
 OoMyCache makes repeated Eloquent reads disappear — transparently — with a correctness-first
 invalidation model that works in any Laravel application: APIs, queues, dashboards, back offices,

@@ -1,5 +1,35 @@
 # Release Notes
 
+## 0.1.5 - 2026-11-17
+
+### Added
+
+- Unkeyable eager loads and bindings now dispatch a `QueryCacheBypassed` event with the exception's
+  machine-readable reason (`unkeyable-relation`, `unkeyable-eager-load`, `unkeyable-binding`) instead
+  of silently running uncached. `UnkeyableValueException` exposes the reason, and
+  `QueryCacheEngine::dispatchBypassedForModel()` mirrors the existing dispatch methods (honouring
+  `oomycache.events.enabled`). The generic `Throwable` fallback remains.
+- New read-only `oomycache:audit` command. It scans application PHP files with Symfony Finder and
+  groups findings by category (quiet writes, raw DB writes, pivot writes) with `path:line` and a
+  hint; `--json` emits structured output. It never executes or modifies application code.
+- Config surface: `filament.dashboard.studio_page` (bridge default) and
+  `filament.invalidation.flush_all_bulk_actions` (env `OOMYCACHE_FILAMENT_FLUSH_ALL_BULK_ACTIONS`,
+  default `true`). Both keys are read by the companion bridge package; core does not change their
+  semantics.
+
+### Fixed
+
+- Paginator count coverage for `groupBy()`/`having()` (and union-style) queries: cached
+  `getCountForPagination()` results now have a regression test proving they match the uncached count
+  and invalidate on a write.
+
+### Documentation
+
+- README Status caveats made explicit (single-host file store, raw/quiet writes need an explicit
+  flush, no `Cache::flush()`, transactional reads bypass, optional Filament bridge).
+- Security review re-checked 2026-11-17: H1/H2/H3 and M1/M3/M6 fixed; M2/M4/M5/L1/L4/L6/I1/I2
+  documented/accepted residuals; baseline verdict retained for traceability.
+
 ## 0.1.4 - 2026-11-16
 
 ### Added
@@ -25,11 +55,6 @@
   requests no longer lose observations and the counters do not rely on cache events. A shared
   `window_start` key makes `snapshot()['window_seconds']` the real age of the counter window, and
   `CacheStats::reset()` starts a fresh window without flushing the application cache.
-
-### Changed
-
-- Dev-only: pin `phpstan/phpstan` to 2.3.5. The type-coverage plugin used by `composer test` calls
-  `AnalyserResult::getCollectedData()`, which was removed in 2.3.6.
 
 ## 0.1.3 - 2026-11-12
 

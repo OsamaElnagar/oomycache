@@ -165,11 +165,13 @@ php artisan oomycache:doctor     # validates configuration; exits 1 on invalid v
 php artisan oomycache:bench "App\Models\Product" --limit=50 --samples=3 --json  # isolated keys; use --clear only to wipe the app cache
 php artisan oomycache:prune      # database store only; expiry-guarded, cache_locks untouched
 php artisan oomycache:clear      # global version bump (never Cache::flush)
+php artisan oomycache:audit      # read-only: report quiet/raw DB/pivot write paths; --json for structured output
 ```
 
 Run `oomycache:doctor` after changing configuration. Run `oomycache:bench` before/after adoption to
 prove warm reads execute **0 application queries**; on the database store it also reports the
-cache-store statements separately (`store_queries`).
+cache-store statements separately (`store_queries`). Run `oomycache:audit` during the write-path audit
+to find raw/quiet/pivot writes that need an explicit flush.
 
 ## Configuration highlights
 
@@ -185,8 +187,11 @@ Read `config/oomycache.php` and `docs/implementation/config-reference.md` instea
 - `tenant.resolver` — class implementing `Oomycache\Oomycache\Contracts\TenantResolver`; required for
   multi-tenant queue/console/API entrypoints that are outside a Filament panel
 - `filament.dashboard.can_purge` — **deny-by-default** Gate required for the bridge's destructive
-  actions; `can_view` optionally restricts the studio page; `navigation_badge` (`off` by default)
-  selects the bridge studio badge (`hit-rate`/`invalidations`/`models`/`off`)
+  actions; `can_view` optionally restricts the studio page; `studio_page` and `navigation_badge`
+  (`off` by default) are read by the bridge for the studio page and its badge
+  (`hit-rate`/`invalidations`/`models`/`off`)
+- `filament.invalidation.flush_all_bulk_actions` (default `true`) — bridge reads this to decide
+  whether every Filament `BulkAction` triggers a flush; `false` limits flushes to known write actions
 
 ## Filament bridge (optional)
 

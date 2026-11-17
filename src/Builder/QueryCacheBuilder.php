@@ -20,6 +20,7 @@ use Illuminate\Support\LazyCollection;
 use Illuminate\Support\Str;
 use Oomycache\Oomycache\Cache\QueryCacheEngine;
 use Oomycache\Oomycache\Concerns\HasQueryCache;
+use Oomycache\Oomycache\Exceptions\UnkeyableValueException;
 use Oomycache\Oomycache\Query\BaseQueryContext;
 use Oomycache\Oomycache\Query\DependencyRecorder;
 use Oomycache\Oomycache\Query\QueryContext;
@@ -723,6 +724,12 @@ class QueryCacheBuilder extends Builder
                     'cache_if' => $this->cacheIf,
                 ] + $extra,
             );
+        } catch (UnkeyableValueException $exception) {
+            // Unkeyable eager loads/bindings must never silently fall back:
+            // report the bypass with the exception's machine-readable reason.
+            $this->engine->dispatchBypassedForModel($model::class, $intent, $exception->reason);
+
+            return $execute();
         } catch (Throwable) {
             return $execute();
         }

@@ -9,6 +9,7 @@ use Illuminate\Queue\Events\JobProcessing;
 use Illuminate\Support\ServiceProvider;
 use Oomycache\Oomycache\Cache\CacheVersionStore;
 use Oomycache\Oomycache\Cache\QueryCacheEngine;
+use Oomycache\Oomycache\Console\Commands\AuditCommand;
 use Oomycache\Oomycache\Console\Commands\BenchCommand;
 use Oomycache\Oomycache\Console\Commands\ClearCommand;
 use Oomycache\Oomycache\Console\Commands\DoctorCommand;
@@ -101,6 +102,7 @@ class OomycacheServiceProvider extends ServiceProvider
             DoctorCommand::class,
             BenchCommand::class,
             PruneCommand::class,
+            AuditCommand::class,
         ]);
     }
 

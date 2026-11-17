@@ -77,6 +77,8 @@
 | `filament.dashboard.navigation_group` | `null` | studio navigation group; `null` inherits the panel default |
 | `filament.dashboard.navigation_sort` | `null` | studio navigation sort; lower values move it higher |
 | `filament.dashboard.navigation_badge` | `off` | bridge studio badge source: `hit-rate` / `invalidations` / `models` / `off`; core only publishes the key |
+| `filament.dashboard.studio_page` | `null` | optional `QueryCacheStudio` subclass registered by the bridge; invalid values fall back to the packaged page |
+| `filament.invalidation.flush_all_bulk_actions` | `true` (env `OOMYCACHE_FILAMENT_FLUSH_ALL_BULK_ACTIONS`) | bridge flushes after every Filament bulk action (safest); set `false` to limit flushes to known write action names and call `FilamentCacheInvalidator::flushForAction()` for custom bulk writers |
 
 ## 4. Removed in alpha (were advertised but unimplemented)
 
