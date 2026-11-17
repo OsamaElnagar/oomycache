@@ -148,11 +148,12 @@ PHP);
         ->toContain('All unobservable write paths have an explicit flush nearby.');
 });
 
-it('ignores Filament column toggles that are UI state, not pivot writes', function (): void {
+it('ignores Filament column and filter toggles that are UI state, not pivot writes', function (): void {
     file_put_contents(oomycacheAuditTempDir().'/SomeTable.php', <<<'PHP'
 <?php
 
 use Filament\Tables\Columns\ToggleColumn;
+use Filament\Tables\Filters\Filter;
 
 class SomeTable
 {
@@ -160,6 +161,7 @@ class SomeTable
     {
         return [
             ToggleColumn::make('is_active')->toggle(),
+            Filter::make('recent')->toggle(),
         ];
     }
 }
@@ -169,6 +171,27 @@ PHP);
     $data = json_decode(Artisan::output(), true);
 
     expect($data['Pivot writes'])->toBeEmpty();
+});
+
+it('marks a raw table write as covered when the file flushes that table', function (): void {
+    file_put_contents(oomycacheAuditTempDir().'/SeedFixer.php', <<<'PHP'
+<?php
+
+class SeedFixer
+{
+    public function run(): void
+    {
+        \Illuminate\Support\Facades\DB::table('attendances')->insert([]);
+        // ... many lines of other work ...
+        \Oomycache\Oomycache\Facades\Oomycache::flushTables(['attendances']);
+    }
+}
+PHP);
+
+    Artisan::call('oomycache:audit', ['--json' => true]);
+    $data = json_decode(Artisan::output(), true);
+
+    expect($data['Raw DB writes'][0]['covered'])->toBeTrue();
 });
 
 it('handles a missing application path gracefully', function (): void {

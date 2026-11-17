@@ -1,5 +1,12 @@
 # Release Notes
 
+## 0.1.8 - 2026-11-17
+
+### Fixed
+
+- `oomycache:audit` also ignores Filament `Filter::make()->toggle()` UI state and marks a raw
+  `DB::table('x')` write as covered when the same file calls `Oomycache::flushTables(['x'])`.
+
 ## 0.1.7 - 2026-11-17
 
 ### Fixed

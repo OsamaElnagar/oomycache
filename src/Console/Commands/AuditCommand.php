@@ -36,8 +36,8 @@ class AuditCommand extends Command
 
     private const string CLEAR_PATTERN = '/Oomycache\s*::\s*clear\s*\(/';
 
-    /** Filament form/table columns use ->toggle() for UI state, not pivots. */
-    private const string COLUMN_TOGGLE_PATTERN = '/(?:ToggleColumn|Toggle)::make\s*\(/';
+    /** Filament columns and filters use ->toggle() for UI state, not pivots. */
+    private const string COLUMN_TOGGLE_PATTERN = '/(?:ToggleColumn|Toggle|Filter)::make\s*\(/';
 
     /**
      * Regex → hint per category. Patterns run against whole file contents so
@@ -186,6 +186,10 @@ class AuditCommand extends Command
                             continue;
                         }
 
+                        $covered = $fileHasClear
+                            || $this->hasNearbyFlush($lines, $line)
+                            || ($category === 'Raw DB writes' && $this->flushCoversRawTable($content, $match[0]));
+
                         $seen[$category][$key] = true;
 
                         if (count($results[$category]) >= self::MAX_FINDINGS_PER_CATEGORY) {
@@ -196,7 +200,7 @@ class AuditCommand extends Command
                             'path' => $relative,
                             'line' => $line,
                             'hint' => $entry['hint'],
-                            'covered' => $fileHasClear || $this->hasNearbyFlush($lines, $line),
+                            'covered' => $covered,
                         ];
                     }
                 }
@@ -238,6 +242,17 @@ class AuditCommand extends Command
         }
 
         return false;
+    }
+
+    private function flushCoversRawTable(string $content, string $matched): bool
+    {
+        if (preg_match('/DB\s*::\s*table\s*\(\s*[\'"]([^\'"]+)[\'"]/', $matched, $match) !== 1) {
+            return false;
+        }
+
+        $table = preg_quote($match[1], '/');
+
+        return preg_match('/flushTables\s*\(\s*\[[^\]]*[\'"]'.$table.'[\'"][^\]]*\]/s', $content) === 1;
     }
 
     private function relativePath(string $path, string $root): string
