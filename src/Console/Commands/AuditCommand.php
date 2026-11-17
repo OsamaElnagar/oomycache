@@ -36,6 +36,9 @@ class AuditCommand extends Command
 
     private const string CLEAR_PATTERN = '/Oomycache\s*::\s*clear\s*\(/';
 
+    /** Filament form/table columns use ->toggle() for UI state, not pivots. */
+    private const string COLUMN_TOGGLE_PATTERN = '/(?:ToggleColumn|Toggle)::make\s*\(/';
+
     /**
      * Regex → hint per category. Patterns run against whole file contents so
      * multi-line chains (DB::table(...)->...->update()) are detected too.
@@ -170,6 +173,13 @@ class AuditCommand extends Command
 
                     foreach ($matches[0] as $match) {
                         $line = substr_count($content, "\n", 0, $match[1]) + 1;
+
+                        if ($category === 'Pivot writes'
+                            && preg_match('/->\s*toggle\s*\(/', $match[0]) === 1
+                            && $this->hasNearbyColumnToggle($lines, $line)) {
+                            continue;
+                        }
+
                         $key = $relative.':'.$line.':'.$entry['hint'];
 
                         if (isset($seen[$category][$key])) {
@@ -206,6 +216,23 @@ class AuditCommand extends Command
 
         for ($index = $from; $index <= $to; $index++) {
             if (preg_match(self::FLUSH_PATTERN, $lines[$index - 1]) === 1) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @param  list<string>  $lines
+     */
+    private function hasNearbyColumnToggle(array $lines, int $line): bool
+    {
+        $from = max(1, $line - self::COVERED_WINDOW_LINES);
+        $to = min(count($lines), $line + self::COVERED_WINDOW_LINES);
+
+        for ($index = $from; $index <= $to; $index++) {
+            if (preg_match(self::COLUMN_TOGGLE_PATTERN, $lines[$index - 1]) === 1) {
                 return true;
             }
         }

@@ -1,5 +1,11 @@
 # Release Notes
 
+## 0.1.7 - 2026-11-17
+
+### Fixed
+
+- `oomycache:audit` no longer reports Filament `ToggleColumn::make()->toggle()` UI state as a pivot write.
+
 ## 0.1.6 - 2026-11-17
 
 ### Changed

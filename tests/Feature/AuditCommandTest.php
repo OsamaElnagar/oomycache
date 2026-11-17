@@ -148,6 +148,29 @@ PHP);
         ->toContain('All unobservable write paths have an explicit flush nearby.');
 });
 
+it('ignores Filament column toggles that are UI state, not pivot writes', function (): void {
+    file_put_contents(oomycacheAuditTempDir().'/SomeTable.php', <<<'PHP'
+<?php
+
+use Filament\Tables\Columns\ToggleColumn;
+
+class SomeTable
+{
+    public function columns(): array
+    {
+        return [
+            ToggleColumn::make('is_active')->toggle(),
+        ];
+    }
+}
+PHP);
+
+    Artisan::call('oomycache:audit', ['--json' => true]);
+    $data = json_decode(Artisan::output(), true);
+
+    expect($data['Pivot writes'])->toBeEmpty();
+});
+
 it('handles a missing application path gracefully', function (): void {
     $missing = oomycacheAuditTempDir().'/does-not-exist';
     $this->app->useAppPath($missing);
