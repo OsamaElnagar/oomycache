@@ -29,6 +29,13 @@ class AuditCommand extends Command
 
     private const int MAX_FINDINGS_PER_CATEGORY = 100;
 
+    /** A flush call this close to a write is treated as an explicit fix. */
+    private const int COVERED_WINDOW_LINES = 6;
+
+    private const string FLUSH_PATTERN = '/Oomycache\s*::\s*(?:flush|flushTables|clear)\s*\(|->\s*flushQueryCache(?:Instance)?\s*\(/';
+
+    private const string CLEAR_PATTERN = '/Oomycache\s*::\s*clear\s*\(/';
+
     /**
      * Regex → hint per category. Patterns run against whole file contents so
      * multi-line chains (DB::table(...)->...->update()) are detected too.
@@ -77,13 +84,19 @@ class AuditCommand extends Command
 
         $this->components->info('OoMyCache audit: write paths the package cannot observe');
 
+        $uncovered = array_map(
+            static fn (array $findings): array => array_values(array_filter($findings, static fn (array $finding): bool => ! $finding['covered'])),
+            $results,
+        );
+        $coveredTotal = $total - array_sum(array_map(static fn (array $findings): int => count($findings), $uncovered));
+
         if ($total === 0) {
             $this->components->info('No unobservable write paths found under '.(function_exists('app_path') ? app_path() : 'the application path').'.');
 
             return self::SUCCESS;
         }
 
-        foreach ($results as $category => $findings) {
+        foreach ($uncovered as $category => $findings) {
             if ($findings === []) {
                 continue;
             }
@@ -95,7 +108,15 @@ class AuditCommand extends Command
             }
         }
 
-        $this->line(sprintf('Total: %d finding(s). Flush the affected tables explicitly after these writes.', $total));
+        if ($coveredTotal > 0) {
+            $this->components->info('Covered by an explicit flush ('.$coveredTotal.') — no action needed.');
+        }
+
+        $open = $total - $coveredTotal;
+
+        $this->line($open === 0
+            ? 'All unobservable write paths have an explicit flush nearby.'
+            : sprintf('Total: %d open finding(s). Flush the affected tables explicitly after these writes.', $open));
 
         return self::SUCCESS;
     }
@@ -103,11 +124,11 @@ class AuditCommand extends Command
     /**
      * Scan app_path() for unobservable write patterns. Read-only and bounded.
      *
-     * @return array<string, list<array{path: string, line: int, hint: string}>>
+     * @return array<string, list<array{path: string, line: int, hint: string, covered: bool}>>
      */
     public function audit(): array
     {
-        /** @var array<string, list<array{path: string, line: int, hint: string}>> $results */
+        /** @var array<string, list<array{path: string, line: int, hint: string, covered: bool}>> $results */
         $results = array_fill_keys(array_keys(self::PATTERNS), []);
         $root = function_exists('app_path') ? app_path() : null;
 
@@ -136,6 +157,8 @@ class AuditCommand extends Command
 
             $content = $file->getContents();
             $relative = $this->relativePath($file->getPathname(), $root);
+            $lines = explode("\n", $content);
+            $fileHasClear = preg_match(self::CLEAR_PATTERN, $content) === 1;
 
             foreach (self::PATTERNS as $category => $entries) {
                 foreach ($entries as $entry) {
@@ -163,6 +186,7 @@ class AuditCommand extends Command
                             'path' => $relative,
                             'line' => $line,
                             'hint' => $entry['hint'],
+                            'covered' => $fileHasClear || $this->hasNearbyFlush($lines, $line),
                         ];
                     }
                 }
@@ -170,6 +194,23 @@ class AuditCommand extends Command
         }
 
         return $results;
+    }
+
+    /**
+     * @param  list<string>  $lines
+     */
+    private function hasNearbyFlush(array $lines, int $line): bool
+    {
+        $from = max(1, $line - self::COVERED_WINDOW_LINES);
+        $to = min(count($lines), $line + self::COVERED_WINDOW_LINES);
+
+        for ($index = $from; $index <= $to; $index++) {
+            if (preg_match(self::FLUSH_PATTERN, $lines[$index - 1]) === 1) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function relativePath(string $path, string $root): string

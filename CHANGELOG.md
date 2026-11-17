@@ -1,5 +1,13 @@
 # Release Notes
 
+## 0.1.6 - 2026-11-17
+
+### Changed
+
+- `oomycache:audit` now recognises explicit `Oomycache::flush()` / `flushTables()` calls near a write
+  (and file-level `Oomycache::clear()`) and reports them as covered instead of open findings. JSON
+  findings include a `covered` flag; the human report separates open from covered findings.
+
 ## 0.1.5 - 2026-11-17
 
 ### Added

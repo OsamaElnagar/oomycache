@@ -115,6 +115,39 @@ it('emits structured findings with --json', function (): void {
         ->and($data['Raw DB writes'][0]['line'])->toBeInt();
 });
 
+it('marks writes with an explicit flush nearby or a global clear as covered', function (): void {
+    file_put_contents(oomycacheAuditTempDir().'/CoveredWriter.php', <<<'PHP'
+<?php
+
+class CoveredWriter
+{
+    public function save($model): void
+    {
+        $model->saveQuietly();
+        \Oomycache\Oomycache\Facades\Oomycache::flush([self::class]);
+    }
+
+    public function wipe(): void
+    {
+        \Oomycache\Oomycache\Facades\Oomycache::clear();
+        \Illuminate\Support\Facades\DB::table('things')->delete();
+    }
+}
+PHP);
+
+    Artisan::call('oomycache:audit', ['--json' => true]);
+    $data = json_decode(Artisan::output(), true);
+
+    expect($data['Quiet writes'][0]['covered'])->toBeTrue()
+        ->and($data['Raw DB writes'][0]['covered'])->toBeTrue();
+
+    Artisan::call('oomycache:audit');
+
+    expect(Artisan::output())
+        ->toContain('Covered by an explicit flush')
+        ->toContain('All unobservable write paths have an explicit flush nearby.');
+});
+
 it('handles a missing application path gracefully', function (): void {
     $missing = oomycacheAuditTempDir().'/does-not-exist';
     $this->app->useAppPath($missing);
